@@ -25,9 +25,9 @@ for seed in "${seeds[@]}"; do
             python fast_td3/train.py \
                 --env_name "dexmachina|${hand}|${clip}" \
                 --exp_name ${run_exp_name} \
-                --num_envs 1024 \
-                --batch_size 32768 \
-                --buffer_size 1024 \
+                --num_envs 512 \
+                --batch_size 2048 \
+                --buffer_size 2048 \
                 --seed ${seed} \
                 --render_interval 0 \
                 --project "dexmachina" \
