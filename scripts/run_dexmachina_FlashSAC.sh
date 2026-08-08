@@ -72,8 +72,10 @@ for seed in "${seeds[@]}"; do
                 `#=== Checkpointing (Save 10 times during training) ===#` \
                 --overrides save_checkpoint_per_interaction_step=4882 \
                 `#=== Reward Shaping ===#` \
-                --overrides ++env.reward_cfg.force_penalty=1.0 \
+                --overrides ++env.reward_cfg.force_penalty=2.0 \
                 --overrides ++env.reward_cfg.action_penalty=0.05 \
+                --overrides ++env.reward_cfg.imi_rew_weight=1.0 \
+                --overrides ++env.reward_cfg.contact_rew_weight=1.0 \
                 `#=== Agent (Expanded Architecture) ===#` \
                 --overrides agent=flashSAC \
                 --overrides agent.actor_hidden_dim=512 \
