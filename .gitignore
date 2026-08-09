@@ -1,2 +1,6 @@
 .direnv
+*.pyc
+*.nbc
+*.nbi
 wandb-settings
+temp.md
