@@ -3,6 +3,8 @@
 # Dexmachina (Genesis GPU Simulator + FlashSAC)
 ##################################################################################
 
+set -e
+
 # --- Auto-activate Conda Environment ---
 eval "$(conda shell.bash hook)"
 if [ "$CONDA_DEFAULT_ENV" != "dexmachina_FlashSAC" ]; then
