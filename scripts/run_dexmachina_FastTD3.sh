@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../FastTD3" || exit 1
 
 hands=("allegro_hand")
 clips=("box-30-230")
-seeds=(0 1000)
+seeds=(0)
 
 for seed in "${seeds[@]}"; do
     for hand in "${hands[@]}"; do
@@ -25,13 +25,21 @@ for seed in "${seeds[@]}"; do
             python fast_td3/train.py \
                 --env_name "dexmachina|${hand}|${clip}" \
                 --exp_name ${run_exp_name} \
-                --num_envs 512 \
-                --batch_size 2048 \
-                --buffer_size 2048 \
-                --seed ${seed} \
-                --render_interval 0 \
                 --project "dexmachina" \
-                --render_interval 5000
+                --seed ${seed} \
+                --num_envs 1024 \
+                --batch_size 4096 \
+                --buffer_size 1024 \
+                --num_updates 8 \
+                --std_min 0.05 \
+                --std_max 0.6 \
+                --policy_noise 0.1 \
+                --gamma 0.99 \
+                --v_min 0.0 \
+                --v_max 250.0 \
+                --disable_bootstrap  \
+                --render_interval 5000 \
+                --eval_interval 5000
         done
     done
 done
