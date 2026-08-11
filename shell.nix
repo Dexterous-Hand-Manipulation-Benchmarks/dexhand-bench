@@ -13,11 +13,11 @@ let
       # Graphics & UI dependencies often needed by cv2 and 3D visualizers
       libGL
       libGLU
-      xorg.libX11
-      xorg.libXext
-      xorg.libXrender
-      xorg.libSM
-      xorg.libICE
+      libX11
+      libXext
+      libXrender
+      libSM
+      libICE
       
       # Standard system libraries
       zlib
