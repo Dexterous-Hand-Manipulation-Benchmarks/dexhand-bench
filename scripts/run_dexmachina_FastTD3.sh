@@ -27,7 +27,7 @@ for seed in "${seeds[@]}"; do
                 --exp_name ${run_exp_name} \
                 --project "dexmachina" \
                 --seed ${seed} \
-                --num_envs 1024 \
+                --num_envs 512 \
                 --batch_size 4096 \
                 --buffer_size 1024 \
                 --num_updates 8 \
