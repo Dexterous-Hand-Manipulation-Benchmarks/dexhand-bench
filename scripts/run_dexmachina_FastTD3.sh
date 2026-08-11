@@ -27,10 +27,11 @@ for seed in "${seeds[@]}"; do
                 --exp_name ${run_exp_name} \
                 --project "dexmachina" \
                 --seed ${seed} \
-                --num_envs 512 \
-                --batch_size 4096 \
+                --learning_starts 50 \
+                --num_envs 896 \
+                --batch_size 16384 \
                 --buffer_size 1024 \
-                --num_updates 8 \
+                --num_updates 2 \
                 --std_min 0.05 \
                 --std_max 0.6 \
                 --policy_noise 0.1 \
@@ -39,7 +40,9 @@ for seed in "${seeds[@]}"; do
                 --v_max 250.0 \
                 --disable_bootstrap  \
                 --render_interval 5000 \
-                --eval_interval 5000
+                --eval_interval 5000 \
+                --max_epochs 10000 \
+                --total_timesteps 150000
         done
     done
 done
