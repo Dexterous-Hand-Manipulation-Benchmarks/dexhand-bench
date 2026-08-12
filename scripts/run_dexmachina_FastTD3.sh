@@ -28,10 +28,10 @@ for seed in "${seeds[@]}"; do
                 --project "dexmachina" \
                 --seed ${seed} \
                 --learning_starts 50 \
-                --num_envs 896 \
+                --num_envs 768 \
                 --batch_size 16384 \
                 --buffer_size 1024 \
-                --num_updates 2 \
+                --num_updates 1 \
                 --std_min 0.05 \
                 --std_max 0.6 \
                 --policy_noise 0.1 \
@@ -41,8 +41,7 @@ for seed in "${seeds[@]}"; do
                 --disable_bootstrap  \
                 --render_interval 5000 \
                 --eval_interval 5000 \
-                --max_epochs 10000 \
-                --total_timesteps 150000
+                --total_timesteps 100000
         done
     done
 done
