@@ -73,11 +73,19 @@ for seed in "${seeds[@]}"; do
                 --overrides num_record_episodes=0 \
                 `#=== Checkpointing (Save 10 times during training) ===#` \
                 --overrides save_checkpoint_per_interaction_step=4882 \
-                `#=== Reward Shaping ===#` \
-                --overrides ++env.reward_cfg.force_penalty=2.0 \
-                --overrides ++env.reward_cfg.action_penalty=0.05 \
-                --overrides ++env.reward_cfg.imi_rew_weight=1.0 \
-                --overrides ++env.reward_cfg.contact_rew_weight=1.0 \
+                `#=== Reward Shaping (Full Dexmachina Match) ===#` \
+                --overrides ++env.reward_cfg.force_penalty=0.1 \
+                --overrides ++env.reward_cfg.action_penalty=0.01 \
+                --overrides ++env.reward_cfg.imi_rew_weight=0.3 \
+                --overrides ++env.reward_cfg.imi_wrist_weight=0.5 \
+                --overrides ++env.reward_cfg.contact_rew_weight=3.0 \
+                --overrides ++env.reward_cfg.contact_beta=10.0 \
+                --overrides ++env.reward_cfg.bc_rew_weight=0.3 \
+                --overrides ++env.reward_cfg.bc_beta=500.0 \
+                --overrides ++env.reward_cfg.use_retarget_contact=true \
+                --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
+                --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
+                --overrides ++env.reward_cfg.obj_arti_beta=5.0 \
                 `#=== Agent (Expanded Architecture) ===#` \
                 --overrides agent=flashSAC \
                 --overrides agent.actor_hidden_dim=512 \
@@ -100,7 +108,6 @@ for seed in "${seeds[@]}"; do
             # 2. RUN EVALUATION & RENDERING FOR ALL SAVED CHECKPOINTS
             echo "[START] Evaluating & Rendering all step milestones for: $run_exp_name"
 
-            # Auto-detect the exact WandB Run ID created by the training script
             LATEST_WANDB_DIR=$(ls -td wandb/*run-* 2>/dev/null | head -n 1)
             if [ -n "$LATEST_WANDB_DIR" ]; then
                 WANDB_RUN_ID=$(basename "$LATEST_WANDB_DIR" | awk -F'-' '{print $NF}')
@@ -111,7 +118,6 @@ for seed in "${seeds[@]}"; do
                 echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
             fi
 
-            # Find ALL step directories sorted by step number
             RUN_PATH="models/FlashSAC/${run_exp_name}/dexmachina/${hand}"
             STEP_DIRS=$(find "$RUN_PATH" -type d -name "step*" 2>/dev/null | sort -V)
 
@@ -120,21 +126,26 @@ for seed in "${seeds[@]}"; do
                 continue
             fi
 
-            # Loop through EVERY checkpoint saved (10%, 20%, ..., 100%) and render a video
             for STEP_DIR in $STEP_DIRS; do
+                STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
                 echo "[INFO] Rendering evaluation video for checkpoint: ${STEP_DIR}"
 
                 python ../envs/FlashSAC/eval_and_render.py \
                     --config_path "configs" \
                     --checkpoint_path "${STEP_DIR}" \
                     ${WANDB_ARG} \
+                    --step "${STEP_NUM}" \
                     --num_episodes 10 \
                     --overrides env=dexmachina \
                     --overrides env.hand="${hand}" \
                     --overrides env.clip="${clip}" \
                     --overrides env.retarget_name="para" \
                     --overrides env.num_record_envs=1 \
-                    --overrides agent.asymmetric_observation=false
+                    --overrides agent.asymmetric_observation=false \
+                    --overrides agent.actor_hidden_dim=512 \
+                    --overrides agent.critic_hidden_dim=512 \
+                    --overrides agent.actor_num_blocks=6 \
+                    --overrides agent.critic_num_blocks=6
             done
 
             echo "[SUCCESS] All milestone evaluations completed for $run_exp_name"
