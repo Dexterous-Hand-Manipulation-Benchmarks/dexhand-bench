@@ -1,7 +1,8 @@
 import os
 import time
 import wandb
-import pandas as pd
+import numpy as np
+import torch
 from typing import Dict, Any, Optional
 
 # --- Universal Metric Mapping Dictionary ---
@@ -133,15 +134,62 @@ class UniversalLogger:
             wandb.define_metric(f"{cls.algo}/*", step_metric="global/env_step")
 
     @classmethod
+    def _clean_metric_val(cls, val: Any) -> Any:
+        """Strips NaNs, Infs, and invalid sequences that break wandb serialization."""
+        if val is None:
+            return None
+
+        # PyTorch Tensor handling
+        if isinstance(val, torch.Tensor):
+            if val.numel() == 0:
+                return None
+            if val.numel() == 1:
+                item = val.item()
+                return None if not np.isfinite(item) else item
+            val = val.detach().cpu().numpy()
+
+        # NumPy Array or Python Sequence handling
+        if isinstance(val, (np.ndarray, list, tuple)):
+            arr = np.asarray(val)
+            if arr.size == 0:
+                return None
+            if not np.issubdtype(arr.dtype, np.number):
+                return val
+            finite_mask = np.isfinite(arr)
+            if not finite_mask.any():
+                return None
+            if not finite_mask.all():
+                arr = arr[finite_mask]
+            if arr.size == 1:
+                return float(arr.item())
+            return arr.tolist()
+
+        # Python scalar numbers
+        if isinstance(val, (int, float, np.floating, np.integer)):
+            if not np.isfinite(val):
+                return None
+            return float(val) if isinstance(val, (float, np.floating)) else int(val)
+
+        return val
+
+    @classmethod
     def _calculate_env_step(cls, raw_data: Dict[str, Any], explicit_step: Optional[int]) -> int:
-        if "num_env_steps" in raw_data and pd.notna(raw_data["num_env_steps"]):
-            return int(raw_data["num_env_steps"])
-        if "total_timesteps" in raw_data and pd.notna(raw_data["total_timesteps"]):
-            return int(raw_data["total_timesteps"])
-        if "frame" in raw_data and pd.notna(raw_data["frame"]):
-            return int(raw_data["frame"])
-        if "epoch" in raw_data and pd.notna(raw_data["epoch"]):
-            return int(raw_data["epoch"]) * (cls.num_envs * cls.horizon_length)
+        if "num_env_steps" in raw_data and raw_data["num_env_steps"] is not None:
+            clean = cls._clean_metric_val(raw_data["num_env_steps"])
+            if clean is not None:
+                return int(clean)
+        if "total_timesteps" in raw_data and raw_data["total_timesteps"] is not None:
+            clean = cls._clean_metric_val(raw_data["total_timesteps"])
+            if clean is not None:
+                return int(clean)
+        if "frame" in raw_data and raw_data["frame"] is not None:
+            clean = cls._clean_metric_val(raw_data["frame"])
+            if clean is not None:
+                return int(clean)
+        if "epoch" in raw_data and raw_data["epoch"] is not None:
+            clean = cls._clean_metric_val(raw_data["epoch"])
+            if clean is not None:
+                return int(clean) * (cls.num_envs * cls.horizon_length)
 
         if explicit_step is not None:
             if cls.algo == "ppo":
@@ -166,9 +214,11 @@ class UniversalLogger:
             "global/wall_time_s": time.time() - cls.start_time
         }
 
-        for key, val in data.items():
-            if not pd.notna(val):
+        for key, raw_val in data.items():
+            val = cls._clean_metric_val(raw_val)
+            if val is None:
                 continue
+
             if key in METRIC_MAPPING:
                 sanitized_payload[METRIC_MAPPING[key]] = val
             elif key.startswith(ALLOWED_NAMESPACES):

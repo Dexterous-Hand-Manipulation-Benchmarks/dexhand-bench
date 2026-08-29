@@ -108,6 +108,7 @@ for seed in "${seeds[@]}"; do
             # 2. RUN EVALUATION & RENDERING FOR ALL SAVED CHECKPOINTS
             echo "[START] Evaluating & Rendering all step milestones for: $run_exp_name"
 
+            # Auto-detect the exact WandB Run ID created by the training script
             LATEST_WANDB_DIR=$(ls -td wandb/*run-* 2>/dev/null | head -n 1)
             if [ -n "$LATEST_WANDB_DIR" ]; then
                 WANDB_RUN_ID=$(basename "$LATEST_WANDB_DIR" | awk -F'-' '{print $NF}')
@@ -119,12 +120,16 @@ for seed in "${seeds[@]}"; do
             fi
 
             RUN_PATH="models/FlashSAC/${run_exp_name}/dexmachina/${hand}"
-            STEP_DIRS=$(find "$RUN_PATH" -type d -name "step*" 2>/dev/null | sort -V)
 
-            if [ -z "$STEP_DIRS" ]; then
+            # --- Target ONLY the latest timestamp folder from this run ---
+            LATEST_TS_DIR=$(ls -td "${RUN_PATH}"/*/ 2>/dev/null | head -n 1)
+
+            if [ -z "$LATEST_TS_DIR" ]; then
                 echo "[ERROR] No checkpoint directories found in ${RUN_PATH}. Skipping evaluation."
                 continue
             fi
+
+            STEP_DIRS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" 2>/dev/null | sort -V)
 
             for STEP_DIR in $STEP_DIRS; do
                 STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
