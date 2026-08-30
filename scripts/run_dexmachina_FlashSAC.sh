@@ -35,6 +35,11 @@ seeds=( 0 1000 2000 )
 for seed in "${seeds[@]}"; do
     for hand in "${hands[@]}"; do
         for clip in "${clips[@]}"; do
+          # Skip only the first specific run
+            #if [ "$hand" = "allegro_hand" ] && [ "$clip" = "box-30-230" ] && [ "$seed" -eq 0 ]; then
+            #    echo "[SKIP] Skipping completed run: ${run_exp_name}"
+            #    continue
+            #fi
 
             # Extract the object name to safely check if retarget data exists
             obj_name=$(echo "$clip" | cut -d'-' -f1)
