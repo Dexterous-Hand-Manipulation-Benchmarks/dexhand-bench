@@ -6,8 +6,9 @@ import numpy as np
 import torch
 from typing import Dict, Any, Optional
 
+# --- Universal Metric Mapping ---
 METRIC_MAPPING: Dict[str, str] = {
-    # 3D Mesh Tracking
+    # 3D Mesh Tracking & Evaluation
     "auc_add": "eval/auc_add",
     "AUC_ADD": "eval/auc_add",
     "AUC-ADD": "eval/auc_add",
@@ -27,7 +28,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "eval/success_rate": "eval/success_5cm",
     "success_rate": "eval/success_5cm",
 
-    # Returns & Episode Lengths
+    # Returns & Lengths
     "avg_return": "eval/return",
     "eval/mean_reward": "eval/return",
     "rewards/iter": "train/return",
@@ -38,7 +39,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "length/iter": "train/ep_length",
     "length/test": "eval/ep_length",
 
-    # Physical Errors & Forces
+    # Physical Errors & Contact Forces
     "contact_force": "env/contact_force",
     "contact_forces": "env/contact_force",
     "Episode/pos_dist": "env/pos_dist",
@@ -48,7 +49,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "Episode/arti_dist": "env/arti_dist",
     "arti_dist": "env/arti_dist",
 
-    # Policy & Critic Dynamics
+    # Policy Dynamics & Losses
     "actor/entropy": "train/entropy",
     "entropy": "train/entropy",
     "actor/loss": "train/actor_loss",
@@ -60,7 +61,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "actor/mean_action": "flash_sac/mean_action",
     "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
 
-    # System Throughput
+    # System
     "fps/total": "perf/fps",
     "fps": "perf/fps"
 }
@@ -87,8 +88,47 @@ MODEL_SPECIFIC_ALLOWLIST = {
     }
 }
 
-# Preserve original methods before hooking
+# Preserve raw SDK methods before hooking
+_ORIG_WANDB_INIT = wandb.init
 _ORIG_RUN_LOG = wandb.sdk.wandb_run.Run.log
+
+
+def _extract_val(cfg: dict, *keys, default=None):
+    for k in keys:
+        if isinstance(k, (list, tuple)):
+            curr = cfg
+            found = True
+            for sub_k in k:
+                if isinstance(curr, dict) and sub_k in curr:
+                    curr = curr[sub_k]
+                else:
+                    found = False
+                    break
+            if found and curr is not None:
+                return curr
+        else:
+            if isinstance(cfg, dict) and k in cfg and cfg[k] is not None:
+                return cfg[k]
+    return default
+
+
+def _to_clean_dict(obj: Any) -> dict:
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    if hasattr(obj, "_content"):  # OmegaConf DictConfig
+        try:
+            from omegaconf import OmegaConf
+            return OmegaConf.to_container(obj, resolve=True)
+        except Exception:
+            pass
+    if hasattr(obj, "__dict__"):
+        return vars(obj)
+    try:
+        return dict(obj)
+    except Exception:
+        return {}
 
 
 class UniversalLogger:
@@ -127,8 +167,75 @@ class UniversalLogger:
         cls.algo_specific_map = MODEL_SPECIFIC_ALLOWLIST.get(cls.algo, {})
 
         if not cls._installed:
-            wandb.sdk.wandb_run.Run.log = _interceptor_function
+            wandb.init = _interceptor_wandb_init
+            wandb.sdk.wandb_run.Run.log = _interceptor_run_log
             cls._installed = True
+
+    @classmethod
+    def standardize_config(cls, raw_cfg: Any) -> Dict[str, Any]:
+        cfg = _to_clean_dict(raw_cfg)
+
+        # 1. Standard Algorithm Canonical Name
+        raw_algo = (
+            cls.algo
+            or _extract_val(cfg, ("agent", "agent_type"), "agent", "name", ("params", "algo", "name"), "group_name")
+            or "unknown_algo"
+        )
+        algo_str = str(raw_algo).lower()
+        if "flash" in algo_str:
+            algo_canonical = "FlashSAC"
+        elif "fast" in algo_str:
+            algo_canonical = "FastTD3"
+        elif "reppo" in algo_str:
+            algo_canonical = "REPPO"
+        elif "ppo" in algo_str:
+            algo_canonical = "PPO"
+        else:
+            algo_canonical = str(raw_algo).upper()
+
+        # 2. Hand & Clip
+        hand = cls.hand or _extract_val(cfg, ("env", "hand"), "hand", ("env", "name"), default="unknown_hand")
+        clip = cls.clip or _extract_val(cfg, ("env", "clip"), "clip", default="unknown_clip")
+
+        # 3. Seed & Scale
+        seed = cls.seed if cls.seed is not None else _extract_val(cfg, "seed", ("agent", "seed"), ("params", "seed"), default=0)
+        num_envs = cls.num_envs if cls.num_envs is not None else _extract_val(
+            cfg, ("env", "num_train_envs"), "num_train_envs", "num_envs", ("hyperparameters", "num_envs"), ("params", "config", "num_actors"), default=1024
+        )
+
+        # 4. Learning Rate & Architecture
+        lr = _extract_val(cfg, ("agent", "learning_rate_init"), "actor_learning_rate", ("hyperparameters", "lr"), ("params", "config", "learning_rate"), default=0.0003)
+        actor_dim = _extract_val(cfg, ("agent", "actor_hidden_dim"), "actor_hidden_dim", ("hyperparameters", "actor_hidden_dim"), default=512)
+        critic_dim = _extract_val(cfg, ("agent", "critic_hidden_dim"), "critic_hidden_dim", ("hyperparameters", "critic_hidden_dim"), default=512)
+        actor_blocks = _extract_val(cfg, ("agent", "actor_num_blocks"), "actor_num_blocks", ("hyperparameters", "num_actor_layers"), default=1)
+        critic_blocks = _extract_val(cfg, ("agent", "critic_num_blocks"), "critic_num_blocks", ("hyperparameters", "num_critic_pred_layers"), default=1)
+        gamma = _extract_val(cfg, ("agent", "gamma"), ("hyperparameters", "gamma"), "gamma", ("params", "config", "gamma"), default=0.99)
+        batch_size = _extract_val(cfg, ("agent", "sample_batch_size"), "batch_size", ("hyperparameters", "num_mini_batches"), ("params", "config", "minibatch_size"), default=2048)
+        use_amp = _extract_val(cfg, ("agent", "use_amp"), "amp", ("platform", "amp_enabled"), ("params", "config", "mixed_precision"), default=True)
+
+        canonical_dict = {
+            "algo": algo_canonical,
+            "hand": str(hand),
+            "clip": str(clip),
+            "seed": int(seed),
+            "num_envs": int(num_envs),
+            "learning_rate": float(lr),
+            "actor_hidden_dim": int(actor_dim),
+            "critic_hidden_dim": int(critic_dim),
+            "actor_blocks": int(actor_blocks),
+            "critic_blocks": int(critic_blocks),
+            "gamma": float(gamma),
+            "batch_size": int(batch_size),
+            "use_amp": bool(use_amp),
+        }
+
+        # Inject into both root level and benchmark/ namespace for flexible W&B grouping
+        unified_config = {}
+        for k, v in canonical_dict.items():
+            unified_config[k] = v
+            unified_config[f"benchmark/{k}"] = v
+
+        return unified_config
 
     @classmethod
     def _clean_val(cls, val: Any) -> Any:
@@ -152,7 +259,7 @@ class UniversalLogger:
                 arr = arr[finite_mask]
             if arr.size == 1:
                 return float(arr.item())
-            return None  # Drop multi-element arrays to prevent W&B histogram serialization crashes
+            return None
         if isinstance(val, (int, float, np.floating, np.integer)):
             return None if not np.isfinite(val) else (float(val) if isinstance(val, (float, np.floating)) else int(val))
         return val
@@ -203,8 +310,28 @@ class UniversalLogger:
         return sanitized_payload
 
 
-def _interceptor_function(self, data: Dict[str, Any], *args, **kwargs):
-    """Standard function signature that properly binds self to the active Run instance."""
+def _interceptor_wandb_init(*args, **kwargs):
+    """Intercepts wandb.init() to standardize all run configurations."""
+    raw_cfg = kwargs.get("config", {})
+    std_cfg = UniversalLogger.standardize_config(raw_cfg)
+    kwargs["config"] = std_cfg
+    run = _ORIG_WANDB_INIT(*args, **kwargs)
+
+    # Define standard x-axis metric for custom charts
+    wandb.define_metric("global/env_step")
+    wandb.define_metric("global/*", step_metric="global/env_step")
+    wandb.define_metric("train/*", step_metric="global/env_step")
+    wandb.define_metric("eval/*", step_metric="global/env_step")
+    wandb.define_metric("env/*", step_metric="global/env_step")
+    wandb.define_metric("perf/*", step_metric="global/env_step")
+    if UniversalLogger.keep_model_specific:
+        wandb.define_metric(f"{UniversalLogger.algo}/*", step_metric="global/env_step")
+
+    return run
+
+
+def _interceptor_run_log(self, data: Dict[str, Any], *args, **kwargs):
+    """Intercepts Run.log() across all frameworks."""
     if not isinstance(data, dict):
         return _ORIG_RUN_LOG(self, data, *args, **kwargs)
     payload = UniversalLogger.build_sanitized_payload(data, kwargs.get("step", None))
