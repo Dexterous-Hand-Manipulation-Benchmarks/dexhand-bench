@@ -73,7 +73,7 @@ for seed in "${seeds[@]}"; do
                 --v_min 0.0 \
                 --v_max 250.0 \
                 --disable_bootstrap \
-                --save_interval 15000 \
+                --save_interval 2000 \
                 --render_interval 5000 \
                 --eval_interval 5000 \
                 --total_timesteps 10000 \
