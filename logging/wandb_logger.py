@@ -1,13 +1,13 @@
 import os
 import time
 import wandb
+import wandb.sdk.wandb_run
 import numpy as np
 import torch
 from typing import Dict, Any, Optional
 
-# --- Universal Metric Mapping Dictionary ---
 METRIC_MAPPING: Dict[str, str] = {
-    # 3D Mesh Tracking (DexMachina ADD / AUC-ADD) & Success Thresholds
+    # 3D Mesh Tracking
     "auc_add": "eval/auc_add",
     "AUC_ADD": "eval/auc_add",
     "AUC-ADD": "eval/auc_add",
@@ -72,6 +72,13 @@ METRIC_MAPPING: Dict[str, str] = {
 ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/")
 
 MODEL_SPECIFIC_ALLOWLIST = {
+    "fasttd3": {
+        "q_loss": "fast_td3/q_loss",
+        "q1": "fast_td3/q1_val",
+        "q2": "fast_td3/q2_val",
+        "actor_loss": "train/actor_loss",
+        "critic_loss": "train/critic_loss",
+    },
     "flashsac": {
         "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
         "actor/mean_action": "flash_sac/mean_action"
@@ -101,6 +108,7 @@ MODEL_SPECIFIC_ALLOWLIST = {
 class UniversalLogger:
     _installed: bool = False
     _orig_wandb_log = None
+    _orig_run_log = None
 
     @classmethod
     def install(
@@ -127,31 +135,20 @@ class UniversalLogger:
         cls.last_env_step = 0
         cls.algo_specific_map = MODEL_SPECIFIC_ALLOWLIST.get(cls.algo, {})
 
+        # 1. Hook module-level wandb.log
         cls._orig_wandb_log = wandb.log
-        wandb.log = cls._intercepted_log
+        wandb.log = cls._intercepted_wandb_log
+
+        # 2. Hook class-level Run.log
+        cls._orig_run_log = wandb.sdk.wandb_run.Run.log
+        wandb.sdk.wandb_run.Run.log = cls._intercepted_run_log
+
         cls._installed = True
 
-        if wandb.run is not None:
-            cls._setup_metrics()
-
     @classmethod
-    def _setup_metrics(cls):
-        wandb.define_metric("global/env_step")
-        wandb.define_metric("global/*", step_metric="global/env_step")
-        wandb.define_metric("train/*", step_metric="global/env_step")
-        wandb.define_metric("eval/*", step_metric="global/env_step")
-        wandb.define_metric("env/*", step_metric="global/env_step")
-        wandb.define_metric("perf/*", step_metric="global/env_step")
-        if cls.keep_model_specific:
-            wandb.define_metric(f"{cls.algo}/*", step_metric="global/env_step")
-
-    @classmethod
-    def _clean_metric_val(cls, val: Any) -> Any:
-        """Strips NaNs, Infs, and invalid sequences that break wandb serialization."""
+    def _clean_val(cls, val: Any) -> Any:
         if val is None:
             return None
-
-        # PyTorch Tensor handling
         if isinstance(val, torch.Tensor):
             if val.numel() == 0:
                 return None
@@ -159,14 +156,10 @@ class UniversalLogger:
                 item = val.item()
                 return None if not np.isfinite(item) else item
             val = val.detach().cpu().numpy()
-
-        # NumPy Array or Python Sequence handling
         if isinstance(val, (np.ndarray, list, tuple)):
             arr = np.asarray(val)
-            if arr.size == 0:
+            if arr.size == 0 or not np.issubdtype(arr.dtype, np.number):
                 return None
-            if not np.issubdtype(arr.dtype, np.number):
-                return val
             finite_mask = np.isfinite(arr)
             if not finite_mask.any():
                 return None
@@ -174,51 +167,30 @@ class UniversalLogger:
                 arr = arr[finite_mask]
             if arr.size == 1:
                 return float(arr.item())
-            return arr.tolist()
-
-        # Python scalar numbers
+            return None
         if isinstance(val, (int, float, np.floating, np.integer)):
-            if not np.isfinite(val):
-                return None
-            return float(val) if isinstance(val, (float, np.floating)) else int(val)
-
+            return None if not np.isfinite(val) else (float(val) if isinstance(val, (float, np.floating)) else int(val))
         return val
 
     @classmethod
     def _calculate_env_step(cls, raw_data: Dict[str, Any], explicit_step: Optional[int]) -> int:
+        if "global_step" in raw_data and raw_data["global_step"] is not None:
+            return int(raw_data["global_step"])
         if "num_env_steps" in raw_data and raw_data["num_env_steps"] is not None:
-            clean = cls._clean_metric_val(raw_data["num_env_steps"])
-            if clean is not None:
-                return int(clean)
+            return int(raw_data["num_env_steps"])
         if "total_timesteps" in raw_data and raw_data["total_timesteps"] is not None:
-            clean = cls._clean_metric_val(raw_data["total_timesteps"])
-            if clean is not None:
-                return int(clean)
-        if "frame" in raw_data and raw_data["frame"] is not None:
-            clean = cls._clean_metric_val(raw_data["frame"])
-            if clean is not None:
-                return int(clean)
+            return int(raw_data["total_timesteps"])
         if "epoch" in raw_data and raw_data["epoch"] is not None:
-            clean = cls._clean_metric_val(raw_data["epoch"])
-            if clean is not None:
-                return int(clean) * (cls.num_envs * cls.horizon_length)
-
+            return int(raw_data["epoch"]) * (cls.num_envs * cls.horizon_length)
         if explicit_step is not None:
-            if cls.algo == "ppo":
-                return int(explicit_step) * (cls.num_envs * cls.horizon_length)
-            return int(explicit_step) * cls.num_envs
+            return int(explicit_step)
 
         cls.last_env_step += cls.num_envs
         return cls.last_env_step
 
     @classmethod
-    def _intercepted_log(cls, data: Dict[str, Any], *args, **kwargs):
-        if not isinstance(data, dict):
-            cls._orig_wandb_log(data, *args, **kwargs)
-            return
-
-        step_arg = kwargs.get("step", None)
-        env_step = cls._calculate_env_step(data, step_arg)
+    def _build_sanitized_payload(cls, data: Dict[str, Any], explicit_step: Optional[int]) -> Dict[str, Any]:
+        env_step = cls._calculate_env_step(data, explicit_step)
         cls.last_env_step = max(cls.last_env_step, env_step)
 
         sanitized_payload = {
@@ -227,22 +199,34 @@ class UniversalLogger:
         }
 
         for key, raw_val in data.items():
-            val = cls._clean_metric_val(raw_val)
+            if key == "episode_rew":
+                continue
+            val = cls._clean_val(raw_val)
             if val is None:
                 continue
-
             if key in METRIC_MAPPING:
                 sanitized_payload[METRIC_MAPPING[key]] = val
             elif key.startswith(ALLOWED_NAMESPACES):
                 sanitized_payload[key] = val
             elif cls.keep_model_specific and key in cls.algo_specific_map:
                 sanitized_payload[cls.algo_specific_map[key]] = val
-            elif isinstance(val, (wandb.Video, wandb.Image)):
-                sanitized_payload[key] = val
+            elif isinstance(raw_val, (wandb.Video, wandb.Image)):
+                sanitized_payload[key] = raw_val
 
-        if wandb.run is not None and not getattr(cls, "_metrics_defined", False):
-            cls._setup_metrics()
-            cls._metrics_defined = True
+        return sanitized_payload
 
+    @classmethod
+    def _intercepted_wandb_log(cls, data: Dict[str, Any], *args, **kwargs):
+        if not isinstance(data, dict):
+            return cls._orig_wandb_log(data, *args, **kwargs)
+        payload = cls._build_sanitized_payload(data, kwargs.get("step", None))
         kwargs.pop("step", None)
-        cls._orig_wandb_log(sanitized_payload, *args, **kwargs)
+        return cls._orig_wandb_log(payload, *args, **kwargs)
+
+    @classmethod
+    def _intercepted_run_log(cls, run_self, data: Dict[str, Any], *args, **kwargs):
+        if not isinstance(data, dict):
+            return cls._orig_run_log(run_self, data, *args, **kwargs)
+        payload = cls._build_sanitized_payload(data, kwargs.get("step", None))
+        kwargs.pop("step", None)
+        return cls._orig_run_log(run_self, payload, *args, **kwargs)
