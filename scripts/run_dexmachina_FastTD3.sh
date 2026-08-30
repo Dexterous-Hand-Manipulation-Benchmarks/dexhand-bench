@@ -18,19 +18,22 @@ echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
 # --- Define hands and clips to benchmark ---
-hands=(
-    "allegro_hand"
-    "dex3_hand"
-    "inspire_hand"
-    "xhand"
-)
+#hands=(
+#    "allegro_hand"
+#    "dex3_hand"
+#    "inspire_hand"
+#    "xhand"
+#)
+hands=("allegro_hand")
 
-clips=(
-    "box-30-230"
-    "mixer-0-150"
-)
+#clips=(
+#    "box-30-230"
+#    "mixer-0-150"
+#)
+clips=("box-30-230")
 
-seeds=( 0 1000 2000 )
+#seeds=( 0 1000 2000 )
+seeds=( 0 )
 
 for seed in "${seeds[@]}"; do
     for hand in "${hands[@]}"; do
@@ -73,7 +76,7 @@ for seed in "${seeds[@]}"; do
                 --save_interval 15000 \
                 --render_interval 5000 \
                 --eval_interval 5000 \
-                --total_timesteps 150000 \
+                --total_timesteps 10000 \
                 --max_epochs 10000
 
             echo "[SUCCESS] Training completed for $run_exp_name"
