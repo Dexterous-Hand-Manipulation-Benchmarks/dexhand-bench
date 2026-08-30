@@ -27,7 +27,7 @@ SPECIFIC_RUNS=(
     "allegro_hand_box-30-230_seed2000"
 )
 
-# Optional: Map run names to existing WandB run IDs if you want videos uploaded to specific runs
+# Optional: Map run names to existing WandB run IDs if videos are supposed to be uploaded to the specific runs
 declare -A WANDB_RUN_IDS=(
     ["allegro_hand_box-30-230_seed0"]="36ctg6w7"
     ["allegro_hand_box-30-230_seed1000"]="rqq98vl5"
