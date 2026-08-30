@@ -41,7 +41,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "length/test": "eval/ep_length",
     "eval_avg_length": "eval/ep_length",
 
-    # DexMachina Physical Errors & Contact Forces
+    # Physical Errors & Forces
     "contact_force": "env/contact_force",
     "contact_forces": "env/contact_force",
     "Episode/pos_dist": "env/pos_dist",
@@ -51,7 +51,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "Episode/arti_dist": "env/arti_dist",
     "arti_dist": "env/arti_dist",
 
-    # Policy Dynamics & Losses
+    # Policy & Critic Dynamics
     "actor/entropy": "train/entropy",
     "entropy": "train/entropy",
     "actor/loss": "train/actor_loss",
@@ -60,24 +60,24 @@ METRIC_MAPPING: Dict[str, str] = {
     "critic/loss": "train/critic_loss",
     "critic_loss": "train/critic_loss",
     "c_loss": "train/critic_loss",
+    "actor/mean_action": "flash_sac/mean_action",
+    "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
     "actor_lr": "train/actor_lr",
     "critic_lr": "train/critic_lr",
 
-    # System & Throughput
+    # System Throughput
     "fps/total": "perf/fps",
     "fps": "perf/fps",
     "speed": "perf/fps"
 }
 
-ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/")
+ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "flash_sac/", "fast_td3/", "ppo/", "reppo/")
 
 MODEL_SPECIFIC_ALLOWLIST = {
     "fasttd3": {
         "q_loss": "fast_td3/q_loss",
         "q1": "fast_td3/q1_val",
         "q2": "fast_td3/q2_val",
-        "actor_loss": "train/actor_loss",
-        "critic_loss": "train/critic_loss",
     },
     "flashsac": {
         "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
@@ -104,11 +104,22 @@ MODEL_SPECIFIC_ALLOWLIST = {
     }
 }
 
+# Preserve original methods before hooking
+_ORIG_RUN_LOG = wandb.sdk.wandb_run.Run.log
+
 
 class UniversalLogger:
     _installed: bool = False
-    _orig_wandb_log = None
-    _orig_run_log = None
+    algo: str = "flashsac"
+    hand: str = "allegro_hand"
+    clip: str = "box-30-230"
+    seed: int = 0
+    num_envs: int = 1024
+    horizon_length: int = 16
+    keep_model_specific: bool = True
+    start_time: float = time.time()
+    last_env_step: int = 0
+    algo_specific_map: Dict[str, str] = {}
 
     @classmethod
     def install(
@@ -121,13 +132,10 @@ class UniversalLogger:
         horizon_length: int = 16,
         keep_model_specific: bool = True
     ):
-        if cls._installed:
-            return
-
         cls.algo = algo.lower()
-        cls.hand = hand
-        cls.clip = clip
-        cls.seed = seed
+        cls.hand = str(hand)
+        cls.clip = str(clip)
+        cls.seed = int(seed)
         cls.num_envs = int(num_envs)
         cls.horizon_length = int(horizon_length)
         cls.keep_model_specific = keep_model_specific
@@ -135,15 +143,9 @@ class UniversalLogger:
         cls.last_env_step = 0
         cls.algo_specific_map = MODEL_SPECIFIC_ALLOWLIST.get(cls.algo, {})
 
-        # 1. Hook module-level wandb.log
-        cls._orig_wandb_log = wandb.log
-        wandb.log = cls._intercepted_wandb_log
-
-        # 2. Hook class-level Run.log
-        cls._orig_run_log = wandb.sdk.wandb_run.Run.log
-        wandb.sdk.wandb_run.Run.log = cls._intercepted_run_log
-
-        cls._installed = True
+        if not cls._installed:
+            wandb.sdk.wandb_run.Run.log = _interceptor_function
+            cls._installed = True
 
     @classmethod
     def _clean_val(cls, val: Any) -> Any:
@@ -167,13 +169,15 @@ class UniversalLogger:
                 arr = arr[finite_mask]
             if arr.size == 1:
                 return float(arr.item())
-            return None
+            return None  # Drop multi-element arrays to prevent W&B histogram serialization crashes
         if isinstance(val, (int, float, np.floating, np.integer)):
             return None if not np.isfinite(val) else (float(val) if isinstance(val, (float, np.floating)) else int(val))
         return val
 
     @classmethod
     def _calculate_env_step(cls, raw_data: Dict[str, Any], explicit_step: Optional[int]) -> int:
+        if "global/env_step" in raw_data and raw_data["global/env_step"] is not None:
+            return int(raw_data["global/env_step"])
         if "global_step" in raw_data and raw_data["global_step"] is not None:
             return int(raw_data["global_step"])
         if "num_env_steps" in raw_data and raw_data["num_env_steps"] is not None:
@@ -189,7 +193,7 @@ class UniversalLogger:
         return cls.last_env_step
 
     @classmethod
-    def _build_sanitized_payload(cls, data: Dict[str, Any], explicit_step: Optional[int]) -> Dict[str, Any]:
+    def build_sanitized_payload(cls, data: Dict[str, Any], explicit_step: Optional[int]) -> Dict[str, Any]:
         env_step = cls._calculate_env_step(data, explicit_step)
         cls.last_env_step = max(cls.last_env_step, env_step)
 
@@ -215,18 +219,11 @@ class UniversalLogger:
 
         return sanitized_payload
 
-    @classmethod
-    def _intercepted_wandb_log(cls, data: Dict[str, Any], *args, **kwargs):
-        if not isinstance(data, dict):
-            return cls._orig_wandb_log(data, *args, **kwargs)
-        payload = cls._build_sanitized_payload(data, kwargs.get("step", None))
-        kwargs.pop("step", None)
-        return cls._orig_wandb_log(payload, *args, **kwargs)
 
-    @classmethod
-    def _intercepted_run_log(cls, run_self, data: Dict[str, Any], *args, **kwargs):
-        if not isinstance(data, dict):
-            return cls._orig_run_log(run_self, data, *args, **kwargs)
-        payload = cls._build_sanitized_payload(data, kwargs.get("step", None))
-        kwargs.pop("step", None)
-        return cls._orig_run_log(run_self, payload, *args, **kwargs)
+def _interceptor_function(self, data: Dict[str, Any], *args, **kwargs):
+    """Standard function signature that properly binds self to the active Run instance."""
+    if not isinstance(data, dict):
+        return _ORIG_RUN_LOG(self, data, *args, **kwargs)
+    payload = UniversalLogger.build_sanitized_payload(data, kwargs.get("step", None))
+    kwargs.pop("step", None)
+    return _ORIG_RUN_LOG(self, payload, *args, **kwargs)
