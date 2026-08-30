@@ -61,7 +61,7 @@ for seed in "${seeds[@]}"; do
                 --overrides seed=${seed} \
                 `#=== Logging (WandB) ===#` \
                 --overrides logger_type='wandb' \
-                --overrides project_name='dexmachina' \
+                --overrides project_name='dexmachina_clean' \
                 --overrides entity_name='schrapsi-kit' \
                 --overrides group_name='FlashSAC' \
                 --overrides exp_name=${run_exp_name} \
