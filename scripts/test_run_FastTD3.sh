@@ -73,23 +73,24 @@ else
     echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
 fi
 
-# Find all saved checkpoints for this test run
-CKPTS=$(ls -t models/*/*${run_exp_name}*.pt 2>/dev/null | sort -V)
+# Target ONLY the latest timestamp directory from this test run
+RUN_PATH="models/FastTD3/${run_exp_name}"
+LATEST_TS_DIR=$(ls -td "${RUN_PATH}"/*/ 2>/dev/null | head -n 1)
 
-if [ -z "$CKPTS" ]; then
-    echo "[ERROR] No checkpoints found matching models/*/*${run_exp_name}*.pt!"
+if [ -z "$LATEST_TS_DIR" ]; then
+    echo "[ERROR] No checkpoint directory found in ${RUN_PATH}!"
     exit 1
 fi
 
-for CKPT in $CKPTS; do
-    STEP_NUM=$(basename "$CKPT" .pt | grep -o '[0-9]\+$' || echo "")
-    echo "[INFO] Evaluating checkpoint: ${CKPT} (Step: ${STEP_NUM:-final})"
+echo "[INFO] Evaluating checkpoints from: ${LATEST_TS_DIR}"
 
-    STEP_ARG=""
-    if [ -n "$STEP_NUM" ]; then
-        ENV_STEP=$(( STEP_NUM * 64 ))
-        STEP_ARG="--step ${ENV_STEP}"
-    fi
+# 1. Evaluate intermediate step checkpoints
+STEP_CKPTS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type f -name "step*.pt" 2>/dev/null | sort -V)
+
+for CKPT in $STEP_CKPTS; do
+    STEP_NUM=$(basename "$CKPT" .pt | sed 's/step//')
+    ENV_STEP=$(( STEP_NUM * 64 ))
+    echo "[INFO] Evaluating checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
 
     python ../envs/FastTD3/eval_fast_td3.py \
         --checkpoint "$CKPT" \
@@ -97,8 +98,23 @@ for CKPT in $CKPTS; do
         --env_name "dexmachina|${hand}|${clip}" \
         --record_video \
         ${WANDB_ARG} \
-        ${STEP_ARG}
+        --step "${ENV_STEP}"
 done
+
+# 2. Evaluate final checkpoint
+if [ -f "${LATEST_TS_DIR}/final.pt" ]; then
+    FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
+    TOTAL_ENV_STEPS=$(( 200 * 64 ))
+    echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
+
+    python ../envs/FastTD3/eval_fast_td3.py \
+        --checkpoint "$FINAL_CKPT" \
+        --num_envs 20 \
+        --env_name "dexmachina|${hand}|${clip}" \
+        --record_video \
+        ${WANDB_ARG} \
+        --step "${TOTAL_ENV_STEPS}"
+fi
 
 echo "========================================================"
 echo "[SUCCESS] FastTD3 Smoke Test completed successfully!"
