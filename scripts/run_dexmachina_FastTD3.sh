@@ -95,23 +95,24 @@ for seed in "${seeds[@]}"; do
                 echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
             fi
 
-            # Find all saved checkpoints for this run
-            CKPTS=$(ls -t models/*/*${run_exp_name}*.pt 2>/dev/null | sort -V)
+            # Target ONLY the latest timestamp directory from this specific run
+            RUN_PATH="models/FastTD3/${run_exp_name}"
+            LATEST_TS_DIR=$(ls -td "${RUN_PATH}"/*/ 2>/dev/null | head -n 1)
 
-            if [ -z "$CKPTS" ]; then
-                echo "[WARNING] No checkpoints found for ${run_exp_name}. Skipping milestone evaluation."
+            if [ -z "$LATEST_TS_DIR" ]; then
+                echo "[WARNING] No checkpoint directory found in ${RUN_PATH}. Skipping evaluation."
                 continue
             fi
 
-            for CKPT in $CKPTS; do
-                STEP_NUM=$(basename "$CKPT" .pt | grep -o '[0-9]\+$' || echo "")
-                echo "[INFO] Evaluating checkpoint: ${CKPT} (Step: ${STEP_NUM:-final})"
+            echo "[INFO] Evaluating checkpoints from: ${LATEST_TS_DIR}"
 
-                STEP_ARG=""
-                if [ -n "$STEP_NUM" ]; then
-                    ENV_STEP=$(( STEP_NUM * 768 ))
-                    STEP_ARG="--step ${ENV_STEP}"
-                fi
+            # 1. Evaluate intermediate step checkpoints sorted in chronological order
+            STEP_CKPTS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type f -name "step*.pt" 2>/dev/null | sort -V)
+
+            for CKPT in $STEP_CKPTS; do
+                STEP_NUM=$(basename "$CKPT" .pt | sed 's/step//')
+                ENV_STEP=$(( STEP_NUM * 768 ))
+                echo "[INFO] Evaluating intermediate checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
 
                 python ../envs/FastTD3/eval_fast_td3.py \
                     --checkpoint "$CKPT" \
@@ -119,8 +120,23 @@ for seed in "${seeds[@]}"; do
                     --env_name "dexmachina|${hand}|${clip}" \
                     --record_video \
                     ${WANDB_ARG} \
-                    ${STEP_ARG}
+                    --step "${ENV_STEP}"
             done
+
+            # 2. Evaluate final checkpoint
+            if [ -f "${LATEST_TS_DIR}/final.pt" ]; then
+                FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
+                TOTAL_ENV_STEPS=$(( 150000 * 768 ))
+                echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
+
+                python ../envs/FastTD3/eval_fast_td3.py \
+                    --checkpoint "$FINAL_CKPT" \
+                    --num_envs 20 \
+                    --env_name "dexmachina|${hand}|${clip}" \
+                    --record_video \
+                    ${WANDB_ARG} \
+                    --step "${TOTAL_ENV_STEPS}"
+            fi
 
             echo "[SUCCESS] All milestone evaluations completed for $run_exp_name"
             echo "--------------------------------------------------------"
