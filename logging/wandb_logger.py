@@ -33,10 +33,13 @@ METRIC_MAPPING: Dict[str, str] = {
     "rewards/iter": "train/return",
     "rewards/test": "eval/return",
     "eval/avg_return": "eval/return",
+    "eval_avg_return": "eval/return",
+    "env_rewards": "train/return",
     "avg_length": "eval/ep_length",
     "eval/mean_length": "eval/ep_length",
     "length/iter": "train/ep_length",
     "length/test": "eval/ep_length",
+    "eval_avg_length": "eval/ep_length",
 
     # DexMachina Physical Errors & Contact Forces
     "contact_force": "env/contact_force",
@@ -57,10 +60,13 @@ METRIC_MAPPING: Dict[str, str] = {
     "critic/loss": "train/critic_loss",
     "critic_loss": "train/critic_loss",
     "c_loss": "train/critic_loss",
+    "actor_lr": "train/actor_lr",
+    "critic_lr": "train/critic_lr",
 
     # System & Throughput
     "fps/total": "perf/fps",
-    "fps": "perf/fps"
+    "fps": "perf/fps",
+    "speed": "perf/fps"
 }
 
 ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/")
@@ -72,8 +78,14 @@ MODEL_SPECIFIC_ALLOWLIST = {
     },
     "fasttd3": {
         "q_loss": "fast_td3/q_loss",
+        "qf_loss": "fast_td3/qf_loss",
         "q1": "fast_td3/q1_val",
-        "q2": "fast_td3/q2_val"
+        "q2": "fast_td3/q2_val",
+        "qf_max": "fast_td3/qf_max",
+        "qf_min": "fast_td3/qf_min",
+        "actor_grad_norm": "fast_td3/actor_grad_norm",
+        "critic_grad_norm": "fast_td3/critic_grad_norm",
+        "buffer_rewards": "fast_td3/buffer_rewards"
     },
     "ppo": {
         "info/kl": "ppo/kl_divergence",
