@@ -312,8 +312,17 @@ class UniversalLogger:
 
 def _interceptor_wandb_init(*args, **kwargs):
     """Intercepts wandb.init() to standardize all run configurations."""
+    # Add 'curriculum' to tags
+    tags = kwargs.get("tags", [])
+    if "curriculum" not in tags:
+        tags.append("curriculum")
+    kwargs["tags"] = tags
+
+    # 2. Standardize config and inject curriculum flag
     raw_cfg = kwargs.get("config", {})
     std_cfg = UniversalLogger.standardize_config(raw_cfg)
+    std_cfg["curriculum"] = True
+    std_cfg["benchmark/curriculum"] = True
     kwargs["config"] = std_cfg
     run = _ORIG_WANDB_INIT(*args, **kwargs)
 
