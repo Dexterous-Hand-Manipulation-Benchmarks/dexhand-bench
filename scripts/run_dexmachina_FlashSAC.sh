@@ -35,7 +35,10 @@ seeds=( 0 1000 2000 )
 for seed in "${seeds[@]}"; do
     for hand in "${hands[@]}"; do
         for clip in "${clips[@]}"; do
-          # Skip only the first specific run
+
+            run_exp_name="${hand}_${clip}_seed${seed}"
+
+            # Skip only the first specific run
             #if [ "$hand" = "allegro_hand" ] && [ "$clip" = "box-30-230" ] && [ "$seed" -eq 0 ]; then
             #    echo "[SKIP] Skipping completed run: ${run_exp_name}"
             #    continue
@@ -50,7 +53,6 @@ for seed in "${seeds[@]}"; do
                 continue
             fi
 
-            run_exp_name="${hand}_${clip}_seed${seed}"
             echo "========================================================"
             echo "[START] Training: $run_exp_name"
             echo "========================================================"
@@ -76,7 +78,7 @@ for seed in "${seeds[@]}"; do
                 --overrides num_record_envs=null \
                 --overrides num_eval_episodes=1024 \
                 --overrides num_record_episodes=0 \
-                `#=== Checkpointing (Save 10 times during training) ===#` \
+                `#=== Checkpointing (Save 10 milestone steps) ===#` \
                 --overrides save_checkpoint_per_interaction_step=4882 \
                 `#=== Reward Shaping (Full Dexmachina Match) ===#` \
                 --overrides ++env.reward_cfg.force_penalty=0.1 \
@@ -110,7 +112,7 @@ for seed in "${seeds[@]}"; do
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
-            # 2. RUN EVALUATION & RENDERING FOR ALL SAVED CHECKPOINTS
+            # 2. RUN EVALUATION & RENDERING WITH AUTOMATIC DISK CLEANUP
             echo "[START] Evaluating & Rendering all step milestones for: $run_exp_name"
 
             # Auto-detect the exact WandB Run ID created by the training script
@@ -125,8 +127,6 @@ for seed in "${seeds[@]}"; do
             fi
 
             RUN_PATH="models/FlashSAC/${run_exp_name}/dexmachina/${hand}"
-
-            # --- Target ONLY the latest timestamp folder from this run ---
             LATEST_TS_DIR=$(ls -td "${RUN_PATH}"/*/ 2>/dev/null | head -n 1)
 
             if [ -z "$LATEST_TS_DIR" ]; then
@@ -134,11 +134,15 @@ for seed in "${seeds[@]}"; do
                 continue
             fi
 
+            # Find and sort all checkpoint milestone directories
             STEP_DIRS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" 2>/dev/null | sort -V)
+            TOTAL_CHECKPOINTS=$(echo "$STEP_DIRS" | wc -w)
+            CHECKPOINT_COUNTER=0
 
             for STEP_DIR in $STEP_DIRS; do
+                CHECKPOINT_COUNTER=$((CHECKPOINT_COUNTER + 1))
                 STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
-                echo "[INFO] Rendering evaluation video for checkpoint: ${STEP_DIR}"
+                echo "[INFO] [${CHECKPOINT_COUNTER}/${TOTAL_CHECKPOINTS}] Rendering video for: ${STEP_DIR}"
 
                 python ../envs/FlashSAC/eval_and_render.py \
                     --config_path "configs" \
@@ -156,9 +160,17 @@ for seed in "${seeds[@]}"; do
                     --overrides agent.critic_hidden_dim=512 \
                     --overrides agent.actor_num_blocks=6 \
                     --overrides agent.critic_num_blocks=6
+
+                # --- Remove intermediate checkpoints after rendering ---
+                if [ "$CHECKPOINT_COUNTER" -lt "$TOTAL_CHECKPOINTS" ]; then
+                    echo "[CLEANUP] Deleted rendered intermediate checkpoint: ${STEP_DIR}"
+                    rm -rf "${STEP_DIR}"
+                else
+                    echo "[PRESERVE] Keeping final checkpoint: ${STEP_DIR}"
+                fi
             done
 
-            echo "[SUCCESS] All milestone evaluations completed for $run_exp_name"
+            echo "[SUCCESS] Milestone evaluations & cleanup completed for $run_exp_name"
             echo "--------------------------------------------------------"
 
         done
