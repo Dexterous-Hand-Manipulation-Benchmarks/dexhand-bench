@@ -148,8 +148,9 @@ for seed in "${seeds[@]}"; do
                     --config_path "configs" \
                     --checkpoint_path "${STEP_DIR}" \
                     ${WANDB_ARG} \
+                    --project "dexmachina_clean" \
                     --step "${STEP_NUM}" \
-                    --num_episodes 10 \
+                    --num_episodes 1 \
                     --overrides env=dexmachina \
                     --overrides env.hand="${hand}" \
                     --overrides env.clip="${clip}" \
