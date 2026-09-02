@@ -67,7 +67,15 @@ METRIC_MAPPING: Dict[str, str] = {
     # System
     "fps/total": "perf/fps",
     "fps": "perf/fps",
-    "speed": "perf/fps"
+    "speed": "perf/fps",
+
+    # Steps & Media (grouped under standard namespaces)
+    "frame": "global/env_step",
+    "env_step": "global/env_step",
+    "eval_video": "eval/video",
+    "render_video": "eval/video",
+    "video": "eval/video",
+    "render": "eval/video"
 }
 
 ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "flash_sac/", "fast_td3/", "ppo/", "reppo/")
@@ -283,6 +291,12 @@ class UniversalLogger:
     def _calculate_env_step(cls, raw_data: Dict[str, Any], explicit_step: Optional[int]) -> int:
         if "global/env_step" in raw_data and raw_data["global/env_step"] is not None:
             return int(raw_data["global/env_step"])
+        if "env_step" in raw_data and raw_data["env_step"] is not None:
+            return int(raw_data["env_step"])
+        if "frame" in raw_data and raw_data["frame"] is not None:
+            return int(raw_data["frame"])
+        if explicit_step is not None:
+            return int(explicit_step)
         if "global_step" in raw_data and raw_data["global_step"] is not None:
             return int(raw_data["global_step"])
         if "num_env_steps" in raw_data and raw_data["num_env_steps"] is not None:
@@ -291,8 +305,6 @@ class UniversalLogger:
             return int(raw_data["total_timesteps"])
         if "epoch" in raw_data and raw_data["epoch"] is not None:
             return int(raw_data["epoch"]) * (cls.num_envs * cls.horizon_length)
-        if explicit_step is not None:
-            return int(explicit_step)
 
         cls.last_env_step += cls.num_envs
         return cls.last_env_step
@@ -308,7 +320,11 @@ class UniversalLogger:
         }
 
         for key, raw_val in data.items():
-            if key == "episode_rew":
+            if key in ("episode_rew", "checkpoint_step"):
+                continue
+            if isinstance(raw_val, (wandb.Video, wandb.Image)):
+                mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"eval/{key}")
+                sanitized_payload[mapped_key] = raw_val
                 continue
             val = cls._clean_val(raw_val)
             if val is None:
@@ -319,8 +335,6 @@ class UniversalLogger:
                 sanitized_payload[key] = val
             elif cls.keep_model_specific and key in cls.algo_specific_map:
                 sanitized_payload[cls.algo_specific_map[key]] = val
-            elif isinstance(raw_val, (wandb.Video, wandb.Image)):
-                sanitized_payload[key] = raw_val
 
         return sanitized_payload
 

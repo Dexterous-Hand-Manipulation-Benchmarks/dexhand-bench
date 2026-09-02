@@ -49,6 +49,13 @@ for seed in "${seeds[@]}"; do
             fi
 
             run_exp_name="${hand}_${clip}_seed${seed}"
+            NUM_TRAIN_ENVS=768
+            TOTAL_TIMESTEPS=2000 #65104
+            MAX_EPOCHS=10000
+            SAVE_INTERVAL=5000
+            RENDER_INTERVAL=5000
+            EVAL_INTERVAL=5000
+
             echo "========================================================"
             echo "[START] Training FastTD3: $run_exp_name"
             echo "========================================================"
@@ -61,7 +68,7 @@ for seed in "${seeds[@]}"; do
                 --entity "schrapsi-kit" \
                 --group_name "FastTD3" \
                 --seed "${seed}" \
-                --num_envs 768 \
+                --num_envs ${NUM_TRAIN_ENVS} \
                 --learning_starts 50 \
                 --batch_size 16384 \
                 --buffer_size 1024 \
@@ -73,11 +80,11 @@ for seed in "${seeds[@]}"; do
                 --v_min 0.0 \
                 --v_max 250.0 \
                 --disable_bootstrap \
-                --save_interval 2000 \
-                --render_interval 5000 \
-                --eval_interval 5000 \
-                --total_timesteps 10000 \
-                --max_epochs 10000
+                --save_interval ${SAVE_INTERVAL} \
+                --render_interval ${RENDER_INTERVAL} \
+                --eval_interval ${EVAL_INTERVAL} \
+                --total_timesteps ${TOTAL_TIMESTEPS} \
+                --max_epochs ${MAX_EPOCHS}
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
@@ -111,7 +118,7 @@ for seed in "${seeds[@]}"; do
 
             for CKPT in $STEP_CKPTS; do
                 STEP_NUM=$(basename "$CKPT" .pt | sed 's/step//')
-                ENV_STEP=$(( STEP_NUM * 768 ))
+                ENV_STEP=$(( STEP_NUM * NUM_TRAIN_ENVS ))
                 echo "[INFO] Evaluating intermediate checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
 
                 python ../envs/FastTD3/eval_fast_td3.py \
@@ -126,7 +133,7 @@ for seed in "${seeds[@]}"; do
             # 2. Evaluate final checkpoint
             if [ -f "${LATEST_TS_DIR}/final.pt" ]; then
                 FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
-                TOTAL_ENV_STEPS=$(( 150000 * 768 ))
+                TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
                 echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
 
                 python ../envs/FastTD3/eval_fast_td3.py \
