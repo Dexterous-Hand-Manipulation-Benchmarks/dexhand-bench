@@ -51,10 +51,10 @@ for seed in "${seeds[@]}"; do
             run_exp_name="${hand}_${clip}_seed${seed}"
             NUM_TRAIN_ENVS=768
             TOTAL_TIMESTEPS=2000 #65104
-            MAX_EPOCHS=10000
-            SAVE_INTERVAL=5000
-            RENDER_INTERVAL=5000
-            EVAL_INTERVAL=5000
+            MAX_EPOCHS=2000
+            SAVE_INTERVAL=1000
+            RENDER_INTERVAL=1000
+            EVAL_INTERVAL=1000
 
             echo "========================================================"
             echo "[START] Training FastTD3: $run_exp_name"
