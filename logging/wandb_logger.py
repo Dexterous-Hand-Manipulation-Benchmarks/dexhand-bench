@@ -42,7 +42,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "length/test": "eval/ep_length",
     "eval_avg_length": "eval/ep_length",
 
-    # Physical Errors & Forces
+    # Physical Errors, Forces & Gains
     "contact_force": "env/contact_force",
     "contact_forces": "env/contact_force",
     "Episode/pos_dist": "env/pos_dist",
@@ -51,6 +51,13 @@ METRIC_MAPPING: Dict[str, str] = {
     "rot_dist": "env/rot_dist",
     "Episode/arti_dist": "env/arti_dist",
     "arti_dist": "env/arti_dist",
+    "keypoint_dist": "env/keypoint_dist",
+    "wrist_pdist": "env/wrist_pdist",
+    "Episode/keypoint_dist": "env/keypoint_dist",
+    "Episode/wrist_pdist": "env/wrist_pdist",
+    "kp": "env/kp",
+    "kv": "env/kv",
+    "fr": "env/fr",
 
     # Policy & Critic Dynamics
     "actor/entropy": "train/entropy",
@@ -69,28 +76,20 @@ METRIC_MAPPING: Dict[str, str] = {
     "fps": "perf/fps",
     "speed": "perf/fps",
 
-    # Steps & Media (grouped under standard namespaces)
+    # Steps & Media
     "frame": "global/env_step",
     "env_step": "global/env_step",
-    "eval_video": "eval/video",
-    "render_video": "eval/video",
-    "video": "eval/video",
-    "render": "eval/video"
+    "eval_video": "media/eval_video",
+    "render_video": "media/train_video",
+    "train_video": "media/train_video",
+    "video": "media/eval_video",
+    "render": "media/train_video"
 }
 
-ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "flash_sac/", "fast_td3/", "ppo/", "reppo/")
+ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "media/", "fast_td3/", "flash_sac/", "ppo/", "reppo/")
 
 MODEL_SPECIFIC_ALLOWLIST = {
-    "fasttd3": {
-        "q_loss": "fast_td3/q_loss",
-        "q1": "fast_td3/q1_val",
-        "q2": "fast_td3/q2_val",
-    },
-    "flashsac": {
-        "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
-        "actor/mean_action": "flash_sac/mean_action"
-    },
-    "fasttd3": {
+    "fast_td3": {
         "q_loss": "fast_td3/q_loss",
         "qf_loss": "fast_td3/qf_loss",
         "q1": "fast_td3/q1_val",
@@ -100,6 +99,10 @@ MODEL_SPECIFIC_ALLOWLIST = {
         "actor_grad_norm": "fast_td3/actor_grad_norm",
         "critic_grad_norm": "fast_td3/critic_grad_norm",
         "buffer_rewards": "fast_td3/buffer_rewards"
+    },
+    "flash_sac": {
+        "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
+        "actor/mean_action": "flash_sac/mean_action"
     },
     "ppo": {
         "info/kl": "ppo/kl_divergence",
@@ -156,7 +159,7 @@ def _to_clean_dict(obj: Any) -> dict:
 
 class UniversalLogger:
     _installed: bool = False
-    algo: str = "flashsac"
+    algo: str = "flash_sac"
     hand: str = "allegro_hand"
     clip: str = "box-30-230"
     seed: int = 0
@@ -178,7 +181,12 @@ class UniversalLogger:
         horizon_length: int = 16,
         keep_model_specific: bool = True
     ):
-        cls.algo = algo.lower()
+        algo_key = algo.lower().replace("-", "_")
+        if algo_key in ("fasttd3", "fast_td3"):
+            algo_key = "fast_td3"
+        elif algo_key in ("flashsac", "flash_sac"):
+            algo_key = "flash_sac"
+        cls.algo = algo_key
         cls.hand = str(hand)
         cls.clip = str(clip)
         cls.seed = int(seed)
@@ -316,6 +324,7 @@ class UniversalLogger:
 
         sanitized_payload = {
             "global/env_step": env_step,
+            "global/step": env_step,
             "global/wall_time_s": time.time() - cls.start_time
         }
 
@@ -323,7 +332,7 @@ class UniversalLogger:
             if key in ("episode_rew", "checkpoint_step"):
                 continue
             if isinstance(raw_val, (wandb.Video, wandb.Image)):
-                mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"eval/{key}")
+                mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"media/{key}")
                 sanitized_payload[mapped_key] = raw_val
                 continue
             val = cls._clean_val(raw_val)
@@ -357,11 +366,14 @@ def _interceptor_wandb_init(*args, **kwargs):
 
     # Define standard x-axis metric for custom charts
     wandb.define_metric("global/env_step")
+    wandb.define_metric("global/step")
+    wandb.define_metric("*", step_metric="global/env_step")
     wandb.define_metric("global/*", step_metric="global/env_step")
     wandb.define_metric("train/*", step_metric="global/env_step")
     wandb.define_metric("eval/*", step_metric="global/env_step")
     wandb.define_metric("env/*", step_metric="global/env_step")
     wandb.define_metric("perf/*", step_metric="global/env_step")
+    wandb.define_metric("media/*", step_metric="global/env_step")
     if UniversalLogger.keep_model_specific:
         wandb.define_metric(f"{UniversalLogger.algo}/*", step_metric="global/env_step")
 
