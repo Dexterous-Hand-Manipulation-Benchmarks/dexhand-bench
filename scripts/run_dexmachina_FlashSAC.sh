@@ -70,6 +70,7 @@ for seed in "${seeds[@]}"; do
                 `#=== Environment (Dexmachina GPU sim) ===#` \
                 --overrides env=dexmachina \
                 --overrides env.hand=${hand} \
+                --overrides env.env_name="dexmachina/${hand}" \
                 --overrides env.clip=${clip} \
                 --overrides env.retarget_name='para' \
                 --overrides num_env_steps=50_000_896 \
@@ -127,8 +128,8 @@ for seed in "${seeds[@]}"; do
                 echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
             fi
 
-            RUN_PATH="models/FlashSAC/${run_exp_name}/dexmachina/${hand}"
-            LATEST_TS_DIR=$(ls -td "${RUN_PATH}"/*/ 2>/dev/null | head -n 1)
+            # Find the latest timestamp directory under models/FlashSAC/${run_exp_name} regardless of hand subfolder
+            LATEST_TS_DIR=$(find "models/FlashSAC/${run_exp_name}" -mindepth 2 -maxdepth 3 -type d -name "seed*" 2>/dev/null | sort -V | tail -n 1)
 
             if [ -z "$LATEST_TS_DIR" ]; then
                 echo "[ERROR] No checkpoint directories found in ${RUN_PATH}. Skipping evaluation."
