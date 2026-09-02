@@ -68,6 +68,9 @@ METRIC_MAPPING: Dict[str, str] = {
     "critic/loss": "train/critic_loss",
     "critic_loss": "train/critic_loss",
     "c_loss": "train/critic_loss",
+    "critic_lr": "train/critic_lr",
+    "actor_lr": "train/actor_lr",
+    "learning_rate": "train/learning_rate",
     "actor/mean_action": "flash_sac/mean_action",
     "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
 
@@ -386,8 +389,10 @@ def _interceptor_wandb_init(*args, **kwargs):
     wandb.define_metric("env/*", step_metric="global/env_step")
     wandb.define_metric("perf/*", step_metric="global/env_step")
     wandb.define_metric("media/*", step_metric="global/env_step")
-    if UniversalLogger.keep_model_specific:
-        wandb.define_metric(f"{UniversalLogger.algo}/*", step_metric="global/env_step")
+    wandb.define_metric("fast_td3/*", step_metric="global/env_step")
+    wandb.define_metric("flash_sac/*", step_metric="global/env_step")
+    wandb.define_metric("ppo/*", step_metric="global/env_step")
+    wandb.define_metric("reppo/*", step_metric="global/env_step")
 
     return run
 
@@ -396,6 +401,14 @@ def _interceptor_run_log(self, data: Dict[str, Any], *args, **kwargs):
     """Intercepts Run.log() across all frameworks."""
     if not isinstance(data, dict):
         return _ORIG_RUN_LOG(self, data, *args, **kwargs)
-    payload = UniversalLogger.build_sanitized_payload(data, kwargs.get("step", None))
-    kwargs.pop("step", None)
+    explicit_step = kwargs.get("step", None)
+    payload = UniversalLogger.build_sanitized_payload(data, explicit_step)
+    env_step = payload.get("global/env_step", explicit_step)
+
+    current_wandb_step = getattr(self, "step", 0)
+    if env_step is not None and env_step >= current_wandb_step:
+        kwargs["step"] = int(env_step)
+    else:
+        kwargs.pop("step", None)
+
     return _ORIG_RUN_LOG(self, payload, *args, **kwargs)
