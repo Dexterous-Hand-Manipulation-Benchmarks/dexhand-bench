@@ -58,6 +58,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "kp": "env/kp",
     "kv": "env/kv",
     "fr": "env/fr",
+    "curriculum_epoch": "env/curriculum_epoch",
 
     # Policy & Critic Dynamics
     "actor/entropy": "train/entropy",
