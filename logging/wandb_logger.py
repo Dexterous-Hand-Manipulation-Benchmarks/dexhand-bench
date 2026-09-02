@@ -164,6 +164,8 @@ class UniversalLogger:
     clip: str = "box-30-230"
     seed: int = 0
     num_envs: int = 1024
+    num_train_envs: int = 1024
+    num_eval_envs: Optional[int] = None
     horizon_length: int = 16
     keep_model_specific: bool = True
     start_time: float = time.time()
@@ -178,6 +180,8 @@ class UniversalLogger:
         clip: str,
         seed: int,
         num_envs: int = 1024,
+        num_train_envs: Optional[int] = None,
+        num_eval_envs: Optional[int] = None,
         horizon_length: int = 16,
         keep_model_specific: bool = True
     ):
@@ -190,7 +194,9 @@ class UniversalLogger:
         cls.hand = str(hand)
         cls.clip = str(clip)
         cls.seed = int(seed)
-        cls.num_envs = int(num_envs)
+        cls.num_train_envs = int(num_train_envs if num_train_envs is not None else num_envs)
+        cls.num_envs = cls.num_train_envs
+        cls.num_eval_envs = int(num_eval_envs) if num_eval_envs is not None else None
         cls.horizon_length = int(horizon_length)
         cls.keep_model_specific = keep_model_specific
         cls.start_time = time.time()
@@ -228,10 +234,13 @@ class UniversalLogger:
         hand = cls.hand or _extract_val(cfg, ("env", "hand"), "hand", ("env", "name"), default="unknown_hand")
         clip = cls.clip or _extract_val(cfg, ("env", "clip"), "clip", default="unknown_clip")
 
-        # 3. Seed & Scale
+        # 3. Seed & Environment Counts (Explicit Train vs Eval)
         seed = cls.seed if cls.seed is not None else _extract_val(cfg, "seed", ("agent", "seed"), ("params", "seed"), default=0)
-        num_envs = cls.num_envs if cls.num_envs is not None else _extract_val(
+        num_train = cls.num_train_envs or _extract_val(
             cfg, ("env", "num_train_envs"), "num_train_envs", "num_envs", ("hyperparameters", "num_envs"), ("params", "config", "num_actors"), default=1024
+        )
+        num_eval = cls.num_eval_envs or _extract_val(
+            cfg, ("env", "num_eval_envs"), "num_eval_envs", "num_eval", default=None
         )
 
         # 4. Learning Rate & Architecture
@@ -249,7 +258,8 @@ class UniversalLogger:
             "hand": str(hand),
             "clip": str(clip),
             "seed": int(seed),
-            "num_envs": int(num_envs),
+            "num_envs": int(num_train),
+            "num_train_envs": int(num_train),
             "learning_rate": float(lr),
             "actor_hidden_dim": int(actor_dim),
             "critic_hidden_dim": int(critic_dim),
@@ -259,6 +269,8 @@ class UniversalLogger:
             "batch_size": int(batch_size),
             "use_amp": bool(use_amp),
         }
+        if num_eval is not None:
+            canonical_dict["num_eval_envs"] = int(num_eval)
 
         # Inject into both root level and benchmark/ namespace for flexible W&B grouping
         unified_config = {}
