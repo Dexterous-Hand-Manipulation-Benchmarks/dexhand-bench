@@ -18,13 +18,12 @@ echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
 # --- Define hands and clips to benchmark ---
-#hands=(
-#    "allegro_hand"
-#    "dex3_hand"
-#    "inspire_hand"
-#    "xhand"
-#)
-hands=("allegro_hand", "dex3_hand")
+hands=(
+    "allegro_hand"
+    "dex3_hand"
+    "inspire_hand"
+    "xhand"
+)
 
 clips=(
     "box-30-230"
@@ -52,7 +51,7 @@ for seed in "${seeds[@]}"; do
             NUM_TRAIN_ENVS=768
             TOTAL_TIMESTEPS=65104 #65104
             MAX_EPOCHS=10000
-            SAVE_INTERVAL=5000
+            SAVE_INTERVAL=$((65104 / 5))
             RENDER_INTERVAL=5000
             EVAL_INTERVAL=5000
 
@@ -64,7 +63,7 @@ for seed in "${seeds[@]}"; do
             python fast_td3/train.py \
                 --env_name "dexmachina|${hand}|${clip}" \
                 --exp_name "${run_exp_name}" \
-                --project "dexmachina_clean" \
+                --project "dexmachina" \
                 --entity "schrapsi-kit" \
                 --group_name "FastTD3" \
                 --seed "${seed}" \
