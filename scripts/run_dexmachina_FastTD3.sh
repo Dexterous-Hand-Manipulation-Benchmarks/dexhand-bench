@@ -52,13 +52,13 @@ for seed in "${seeds[@]}"; do
             fi
 
             run_exp_name="${hand}_${clip}_seed${seed}"
-            NUM_TRAIN_ENVS=768
-            TOTAL_TIMESTEPS=65104 #65104
+            NUM_TRAIN_ENVS=640
+            TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) #65104
             MAX_EPOCHS=10000
-            SAVE_INTERVAL=$((65104 / 5))
-            RENDER_INTERVAL=5000
-            EVAL_INTERVAL=5000
-            BUFFER_SIZE=4096
+            SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 5))
+            RENDER_INTERVAL=$((TOTAL_TIMESTEPS / 10))
+            EVAL_INTERVAL=$((TOTAL_TIMESTEPS / 10))
+            BUFFER_SIZE=1024
 
             # Configure agent-specific parameters
             AGENT_ARGS=( "--agent" "${AGENT}" )
@@ -98,7 +98,9 @@ for seed in "${seeds[@]}"; do
                 --learning_starts 50 \
                 --batch_size 16384 \
                 --buffer_size ${BUFFER_SIZE} \
-                --num_updates 2 \
+                --num_updates 1 \
+                --num_steps 3 \
+                --no_use_cdq \
                 --std_min 0.05 \
                 --std_max 0.6 \
                 --policy_noise 0.1 \
