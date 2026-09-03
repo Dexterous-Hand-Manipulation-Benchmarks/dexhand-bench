@@ -65,7 +65,7 @@ for seed in "${seeds[@]}"; do
             if [ "$AGENT" = "fasttd3_simbav2" ]; then
                 GROUP_NAME="FastTD3_SimbaV2"
                 AGENT_ARGS+=(
-                    "--actor_hidden_dim" "512"
+                    "--actor_hidden_dim" "256"
                     "--critic_hidden_dim" "512"
                     "--actor_num_blocks" "1"
                     "--critic_num_blocks" "2"
@@ -98,7 +98,7 @@ for seed in "${seeds[@]}"; do
                 --learning_starts 50 \
                 --batch_size 16384 \
                 --buffer_size ${BUFFER_SIZE} \
-                --num_updates 1 \
+                --num_updates 2 \
                 --std_min 0.05 \
                 --std_max 0.6 \
                 --policy_noise 0.1 \
