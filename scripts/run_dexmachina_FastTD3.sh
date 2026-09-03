@@ -17,6 +17,10 @@ cd "$(dirname "$0")/../FastTD3" || exit 1
 echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
+# --- Algorithm Selection ---
+# Choose: "fasttd3_simbav2" (FastTD3 + SimbaV2, recommended) or "fasttd3" (plain FastTD3)
+AGENT="fasttd3_simbav2"
+
 # --- Define hands and clips to benchmark ---
 hands=(
     "allegro_hand"
@@ -54,9 +58,31 @@ for seed in "${seeds[@]}"; do
             SAVE_INTERVAL=$((65104 / 5))
             RENDER_INTERVAL=5000
             EVAL_INTERVAL=5000
+            BUFFER_SIZE=4096
+
+            # Configure agent-specific parameters
+            AGENT_ARGS=( "--agent" "${AGENT}" )
+            if [ "$AGENT" = "fasttd3_simbav2" ]; then
+                GROUP_NAME="FastTD3_SimbaV2"
+                AGENT_ARGS+=(
+                    "--actor_hidden_dim" "512"
+                    "--critic_hidden_dim" "512"
+                    "--actor_num_blocks" "1"
+                    "--critic_num_blocks" "2"
+                    "--actor_learning_rate_end" "3e-5"
+                    "--critic_learning_rate_end" "3e-5"
+                    "--weight_decay" "0.0"
+                )
+            else
+                GROUP_NAME="FastTD3"
+                AGENT_ARGS+=(
+                    "--actor_hidden_dim" "512"
+                    "--critic_hidden_dim" "1024"
+                )
+            fi
 
             echo "========================================================"
-            echo "[START] Training FastTD3: $run_exp_name"
+            echo "[START] Training ${GROUP_NAME}: $run_exp_name (Agent: ${AGENT})"
             echo "========================================================"
 
             # 1. RUN TRAINING
@@ -65,12 +91,13 @@ for seed in "${seeds[@]}"; do
                 --exp_name "${run_exp_name}" \
                 --project "dexmachina" \
                 --entity "schrapsi-kit" \
-                --group_name "FastTD3" \
+                --group_name "${GROUP_NAME}" \
+                "${AGENT_ARGS[@]}" \
                 --seed "${seed}" \
                 --num_envs ${NUM_TRAIN_ENVS} \
                 --learning_starts 50 \
                 --batch_size 16384 \
-                --buffer_size 1024 \
+                --buffer_size ${BUFFER_SIZE} \
                 --num_updates 1 \
                 --std_min 0.05 \
                 --std_max 0.6 \
@@ -129,11 +156,23 @@ for seed in "${seeds[@]}"; do
                     --step "${ENV_STEP}"
             done
 
-            # 2. Evaluate final checkpoint
-            if [ -f "${LATEST_TS_DIR}/final.pt" ]; then
+            # 2. Evaluate best checkpoint saved during training
+            if [ -f "${LATEST_TS_DIR}/best.pt" ]; then
+                BEST_CKPT="${LATEST_TS_DIR}/best.pt"
+                TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
+                echo "[INFO] Evaluating best checkpoint: ${BEST_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
+
+                python ../envs/FastTD3/eval_fast_td3.py \
+                    --checkpoint "$BEST_CKPT" \
+                    --num_envs 20 \
+                    --env_name "dexmachina|${hand}|${clip}" \
+                    --record_video \
+                    ${WANDB_ARG} \
+                    --step "${TOTAL_ENV_STEPS}"
+            elif [ -f "${LATEST_TS_DIR}/final.pt" ]; then
                 FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
                 TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
-                echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
+                echo "[INFO] Evaluating fallback final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
 
                 python ../envs/FastTD3/eval_fast_td3.py \
                     --checkpoint "$FINAL_CKPT" \
