@@ -145,7 +145,7 @@ except Exception as e:
         else
             echo "[INFO] [${CKPT_IDX}/${TOTAL_CKPTS}] Evaluating & Rendering Checkpoint: step${STEP_NUM}"
 
-          python "${PYTHON_SCRIPT}" \
+            python "${PYTHON_SCRIPT}" \
               --config_path "configs" \
               --checkpoint_path "${STEP_DIR}" \
               ${WANDB_ARG} \

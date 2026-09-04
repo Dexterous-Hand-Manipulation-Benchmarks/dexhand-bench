@@ -79,7 +79,7 @@ for seed in "${seeds[@]}"; do
                 --overrides num_record_envs=null \
                 --overrides num_eval_episodes=1024 \
                 --overrides num_record_episodes=0 \
-                --overrides ++curriculum=true \
+                --overrides ++env.curriculum=true \
                 `#=== Checkpointing (Save 10 milestone steps) ===#` \
                 --overrides save_checkpoint_per_interaction_step=4882 \
                 `#=== Reward Shaping (Full Dexmachina Match) ===#` \
