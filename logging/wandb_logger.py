@@ -90,7 +90,7 @@ METRIC_MAPPING: Dict[str, str] = {
     "render": "media/train_video"
 }
 
-ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "media/", "fast_td3/", "flash_sac/", "ppo/", "reppo/")
+ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "media/", "best/", "fast_td3/", "flash_sac/", "ppo/", "reppo/")
 
 MODEL_SPECIFIC_ALLOWLIST = {
     "fast_td3": {
@@ -394,6 +394,7 @@ def _interceptor_wandb_init(*args, **kwargs):
     wandb.define_metric("flash_sac/*", step_metric="global/env_step")
     wandb.define_metric("ppo/*", step_metric="global/env_step")
     wandb.define_metric("reppo/*", step_metric="global/env_step")
+    wandb.define_metric("best/*", step_metric="global/env_step")
 
     return run
 

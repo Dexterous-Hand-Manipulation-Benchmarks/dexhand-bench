@@ -161,16 +161,14 @@ for seed in "${seeds[@]}"; do
             # 2. Evaluate best checkpoint saved during training
             if [ -f "${LATEST_TS_DIR}/best.pt" ]; then
                 BEST_CKPT="${LATEST_TS_DIR}/best.pt"
-                TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
-                echo "[INFO] Evaluating best checkpoint: ${BEST_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
+                echo "[INFO] Evaluating best checkpoint: ${BEST_CKPT} (Reading true saved step from metadata)"
 
                 python ../envs/FastTD3/eval_fast_td3.py \
                     --checkpoint "$BEST_CKPT" \
                     --num_envs 20 \
                     --env_name "dexmachina|${hand}|${clip}" \
                     --record_video \
-                    ${WANDB_ARG} \
-                    --step "${TOTAL_ENV_STEPS}"
+                    ${WANDB_ARG}
             elif [ -f "${LATEST_TS_DIR}/final.pt" ]; then
                 FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
                 TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
