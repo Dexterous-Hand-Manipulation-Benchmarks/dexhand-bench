@@ -316,6 +316,8 @@ def _interceptor_wandb_init(*args, **kwargs):
     tags = kwargs.get("tags", [])
     if "curriculum" not in tags:
         tags.append("curriculum")
+    if "original_params" not in tags:
+        tags.append("original_params")
     kwargs["tags"] = tags
 
     # 2. Standardize config and inject curriculum flag

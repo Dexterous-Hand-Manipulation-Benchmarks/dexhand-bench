@@ -17,7 +17,41 @@ cd "$(dirname "$0")/../FlashSAC" || exit 1
 echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
-# --- Define hands and clips to benchmark ---
+
+# --- 1. WandB & Hydra Paths ---
+PROJECT_NAME="dexmachina_clean"
+ENTITY_NAME="schrapsi-kit"
+GROUP_NAME="FlashSAC"
+CONFIG_PATH="configs"
+CONFIG_NAME="flashSAC_base"
+
+# --- 2. Shared Agent Architecture ---
+AGENT_NAME="flashSAC"
+ACTOR_HIDDEN_DIM=128
+CRITIC_HIDDEN_DIM=128
+ACTOR_NUM_BLOCKS=2
+CRITIC_NUM_BLOCKS=2
+ASYMMETRIC_OBS="false"
+
+# --- 3. Shared Environment Identity ---
+ENV_TYPE="dexmachina"
+RETARGET_NAME="para"
+
+# --- 4. Training-Specific Hyperparameters ---
+NUM_ENV_STEPS=50_000_896
+NUM_TRAIN_ENVS=1024
+CHECKPOINT_INTERVAL=4882
+USE_CURRICULUM="true"
+BUFFER_MAX_LENGTH=5_000_000
+BUFFER_MIN_LENGTH=100_000
+BUFFER_DEVICE="cuda"
+SAMPLE_BATCH_SIZE=2048
+USE_AMP="true"
+UPDATES_PER_STEP=2
+GAMMA=0.95
+N_STEP=1
+
+# --- 5. Benchmark Loops ---
 hands=(
     "allegro_hand"
     "dex3_hand"
@@ -32,19 +66,14 @@ clips=(
 
 seeds=( 0 1000 2000 )
 
+# Execution of runs
 for seed in "${seeds[@]}"; do
     for hand in "${hands[@]}"; do
         for clip in "${clips[@]}"; do
 
             run_exp_name="${hand}_${clip}_seed${seed}"
 
-            # Skip only the first specific run
-            #if [ "$hand" = "allegro_hand" ] && [ "$clip" = "box-30-230" ] && [ "$seed" -eq 0 ]; then
-            #    echo "[SKIP] Skipping completed run: ${run_exp_name}"
-            #    continue
-            #fi
-
-            # Extract the object name to safely check if retarget data exists
+            # Verify retarget asset exists before launching run
             obj_name=$(echo "$clip" | cut -d'-' -f1)
             data_file="../dexmachina/dexmachina/assets/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
 
@@ -53,36 +82,52 @@ for seed in "${seeds[@]}"; do
                 continue
             fi
 
+            # --- Dynamically Build Shared Overrides ---
+            SHARED_AGENT_OVERRIDES=(
+                --overrides "agent=${AGENT_NAME}"
+                --overrides "agent.actor_hidden_dim=${ACTOR_HIDDEN_DIM}"
+                --overrides "agent.critic_hidden_dim=${CRITIC_HIDDEN_DIM}"
+                --overrides "agent.actor_num_blocks=${ACTOR_NUM_BLOCKS}"
+                --overrides "agent.critic_num_blocks=${CRITIC_NUM_BLOCKS}"
+                --overrides "agent.asymmetric_observation=${ASYMMETRIC_OBS}"
+            )
+
+            SHARED_ENV_OVERRIDES=(
+                --overrides "env=${ENV_TYPE}"
+                --overrides "env.hand=${hand}"
+                --overrides "env.clip=${clip}"
+                --overrides "env.retarget_name=${RETARGET_NAME}"
+            )
+
             echo "========================================================"
             echo "[START] Training: $run_exp_name"
             echo "========================================================"
 
-            # 1. RUN HEADLESS TRAINING AT MAX SPEED
+            # 1. RUN HEADLESS TRAINING
             python train.py \
-                --config_name flashSAC_base \
-                --overrides seed=${seed} \
+                --config_path "${CONFIG_PATH}" \
+                --config_name "${CONFIG_NAME}" \
+                --overrides "seed=${seed}" \
                 `#=== Logging (WandB) ===#` \
-                --overrides logger_type='wandb' \
-                --overrides project_name='dexmachina_clean' \
-                --overrides entity_name='schrapsi-kit' \
-                --overrides group_name='FlashSAC' \
-                --overrides exp_name=${run_exp_name} \
-                `#=== Environment (Dexmachina GPU sim) ===#` \
-                --overrides env=dexmachina \
-                --overrides env.hand=${hand} \
-                --overrides env.env_name="dexmachina/${hand}" \
-                --overrides env.clip=${clip} \
-                --overrides env.retarget_name='para' \
-                --overrides num_env_steps=50_000_896 \
-                --overrides num_train_envs=1024 \
-                --overrides num_eval_envs=null \
-                --overrides num_record_envs=null \
-                --overrides num_eval_episodes=1024 \
-                --overrides num_record_episodes=0 \
-                --overrides ++env.curriculum=true \
-                `#=== Checkpointing (Save 10 milestone steps) ===#` \
-                --overrides save_checkpoint_per_interaction_step=4882 \
-                `#=== Reward Shaping (Full Dexmachina Match) ===#` \
+                --overrides "logger_type=wandb" \
+                --overrides "project_name=${PROJECT_NAME}" \
+                --overrides "entity_name=${ENTITY_NAME}" \
+                --overrides "group_name=${GROUP_NAME}" \
+                --overrides "exp_name=${run_exp_name}" \
+                `#=== Injected Shared Overrides ===#` \
+                "${SHARED_ENV_OVERRIDES[@]}" \
+                "${SHARED_AGENT_OVERRIDES[@]}" \
+                `#=== Environment Execution Parameters ===#` \
+                --overrides "env.env_name=dexmachina/${hand}" \
+                --overrides "num_env_steps=${NUM_ENV_STEPS}" \
+                --overrides "num_train_envs=${NUM_TRAIN_ENVS}" \
+                --overrides "num_eval_envs=null" \
+                --overrides "num_record_envs=null" \
+                --overrides "num_eval_episodes=${NUM_TRAIN_ENVS}" \
+                --overrides "num_record_episodes=0" \
+                --overrides "++env.curriculum=${USE_CURRICULUM}" \
+                --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}" \
+                `#=== Reward Shaping ===#` \
                 --overrides ++env.reward_cfg.force_penalty=0.1 \
                 --overrides ++env.reward_cfg.action_penalty=0.01 \
                 --overrides ++env.reward_cfg.imi_rew_weight=0.3 \
@@ -95,22 +140,15 @@ for seed in "${seeds[@]}"; do
                 --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
                 --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
                 --overrides ++env.reward_cfg.obj_arti_beta=5.0 \
-                `#=== Agent (Expanded Architecture) ===#` \
-                --overrides agent=flashSAC \
-                --overrides agent.actor_hidden_dim=512 \
-                --overrides agent.critic_hidden_dim=512 \
-                --overrides agent.actor_num_blocks=6 \
-                --overrides agent.critic_num_blocks=6 \
-                --overrides agent.buffer_max_length=2_000_000 \
-                --overrides agent.buffer_min_length=100_000 \
-                --overrides agent.buffer_device_type='cuda' \
-                --overrides agent.sample_batch_size=2048 \
-                --overrides agent.use_amp=true \
-                --overrides updates_per_interaction_step=2 \
-                `#=== Benchmark default ===#` \
-                --overrides agent.asymmetric_observation=false \
-                --overrides gamma=0.99 \
-                --overrides n_step=1
+                `#=== Buffer & Off-Policy Optimization ===#` \
+                --overrides "agent.buffer_max_length=${BUFFER_MAX_LENGTH}" \
+                --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
+                --overrides "agent.buffer_device_type=${BUFFER_DEVICE}" \
+                --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
+                --overrides "agent.use_amp=${USE_AMP}" \
+                --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
+                --overrides "gamma=${GAMMA}" \
+                --overrides "n_step=${N_STEP}"
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
@@ -128,15 +166,14 @@ for seed in "${seeds[@]}"; do
                 echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
             fi
 
-            # Find the latest timestamp directory under models/FlashSAC/${run_exp_name} regardless of hand subfolder
+            # Locate latest checkpoint run directory
             LATEST_TS_DIR=$(find "models/FlashSAC/${run_exp_name}" -mindepth 2 -maxdepth 3 -type d -name "seed*" 2>/dev/null | sort -V | tail -n 1)
 
             if [ -z "$LATEST_TS_DIR" ]; then
-                echo "[ERROR] No checkpoint directories found in ${RUN_PATH}. Skipping evaluation."
+                echo "[ERROR] No checkpoint directories found for ${run_exp_name}. Skipping evaluation."
                 continue
             fi
 
-            # Find and sort all checkpoint milestone directories
             STEP_DIRS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" 2>/dev/null | sort -V)
             TOTAL_CHECKPOINTS=$(echo "$STEP_DIRS" | wc -w)
             CHECKPOINT_COUNTER=0
@@ -147,24 +184,19 @@ for seed in "${seeds[@]}"; do
                 echo "[INFO] [${CHECKPOINT_COUNTER}/${TOTAL_CHECKPOINTS}] Rendering video for: ${STEP_DIR}"
 
                 python ../envs/FlashSAC/eval_and_render.py \
-                    --config_path "configs" \
+                    --config_path "${CONFIG_PATH}" \
+                    --config_name "${CONFIG_NAME}" \
                     --checkpoint_path "${STEP_DIR}" \
                     ${WANDB_ARG} \
-                    --project "dexmachina_clean" \
+                    --project "${PROJECT_NAME}" \
+                    --entity "${ENTITY_NAME}" \
                     --step "${STEP_NUM}" \
                     --num_episodes 1 \
-                    --overrides env=dexmachina \
-                    --overrides env.hand="${hand}" \
-                    --overrides env.clip="${clip}" \
-                    --overrides env.retarget_name="para" \
-                    --overrides env.num_record_envs=1 \
-                    --overrides agent.asymmetric_observation=false \
-                    --overrides agent.actor_hidden_dim=512 \
-                    --overrides agent.critic_hidden_dim=512 \
-                    --overrides agent.actor_num_blocks=6 \
-                    --overrides agent.critic_num_blocks=6
+                    "${SHARED_ENV_OVERRIDES[@]}" \
+                    "${SHARED_AGENT_OVERRIDES[@]}" \
+                    --overrides "env.num_record_envs=1"
 
-                # --- Remove intermediate checkpoints after rendering ---
+                # Cleanup intermediate steps, keep only the final milestone
                 if [ "$CHECKPOINT_COUNTER" -lt "$TOTAL_CHECKPOINTS" ]; then
                     echo "[CLEANUP] Deleted rendered intermediate checkpoint: ${STEP_DIR}"
                     rm -rf "${STEP_DIR}"
