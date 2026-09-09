@@ -163,6 +163,7 @@ def _to_clean_dict(obj: Any) -> dict:
 
 class UniversalLogger:
     _installed: bool = False
+    is_eval: bool = False
     algo: str = "flash_sac"
     hand: str = "allegro_hand"
     clip: str = "box-30-230"
@@ -187,7 +188,8 @@ class UniversalLogger:
         num_train_envs: Optional[int] = None,
         num_eval_envs: Optional[int] = None,
         horizon_length: int = 16,
-        keep_model_specific: bool = True
+        keep_model_specific: bool = True,
+        is_eval: bool = False,
     ):
         algo_key = algo.lower().replace("-", "_")
         if algo_key in ("fasttd3", "fast_td3"):
@@ -203,6 +205,7 @@ class UniversalLogger:
         cls.num_eval_envs = int(num_eval_envs) if num_eval_envs is not None else None
         cls.horizon_length = int(horizon_length)
         cls.keep_model_specific = keep_model_specific
+        cls.is_eval = is_eval
         cls.start_time = time.time()
         cls.last_env_step = 0
         cls.algo_specific_map = MODEL_SPECIFIC_ALLOWLIST.get(cls.algo, {})
@@ -407,10 +410,18 @@ def _interceptor_run_log(self, data: Dict[str, Any], *args, **kwargs):
     payload = UniversalLogger.build_sanitized_payload(data, explicit_step)
     env_step = payload.get("global/env_step", explicit_step)
 
-    current_wandb_step = getattr(self, "step", 0)
-    if env_step is not None and env_step >= current_wandb_step:
-        kwargs["step"] = int(env_step)
-    else:
+    # In evaluation mode, when resuming an existing run, or when explicit_step was not passed,
+    # avoid overriding WandB's internal step counter. Metrics are mapped to global/env_step
+    # via wandb.define_metric(step_metric="global/env_step"). Forcing the internal step
+    # triggers non-monotonic step errors if checkpoints are evaluated out-of-order or post-training.
+    is_resumed = getattr(self, "resumed", False)
+    if UniversalLogger.is_eval or is_resumed or explicit_step is None:
         kwargs.pop("step", None)
+    else:
+        current_wandb_step = getattr(self, "step", 0)
+        if env_step is not None and env_step >= current_wandb_step:
+            kwargs["step"] = int(env_step)
+        else:
+            kwargs.pop("step", None)
 
     return _ORIG_RUN_LOG(self, payload, *args, **kwargs)
