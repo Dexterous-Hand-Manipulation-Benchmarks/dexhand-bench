@@ -4,13 +4,7 @@
 ##################################################################################
 
 set -e
-
-# --- Auto-activate Conda Environment ---
-eval "$(conda shell.bash hook)"
-if [ "$CONDA_DEFAULT_ENV" != "dexmachina" ]; then
-    echo "[INFO] Activating Conda environment 'dexmachina'..."
-    conda activate dexmachina
-fi
+source .venv/bin/activate
 
 cd "$(dirname "$0")/../FastTD3" || exit 1
 
@@ -35,8 +29,8 @@ clips=(
 )
 #clips=("box-30-230")
 
-#seeds=( 0 1000 2000 )
-seeds=( 0 )
+seeds=( 0 1000 2000 )
+#seeds=( 0 )
 
 for seed in "${seeds[@]}"; do
     for hand in "${hands[@]}"; do
@@ -52,13 +46,13 @@ for seed in "${seeds[@]}"; do
             fi
 
             run_exp_name="${hand}_${clip}_seed${seed}"
-            NUM_TRAIN_ENVS=640
-            TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) #65104
+            NUM_TRAIN_ENVS=2048
+            TOTAL_TIMESTEPS=$((5000000 / NUM_TRAIN_ENVS)) #65104
             MAX_EPOCHS=10000
-            SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 5))
-            RENDER_INTERVAL=$((TOTAL_TIMESTEPS / 10))
-            EVAL_INTERVAL=$((TOTAL_TIMESTEPS / 10))
-            BUFFER_SIZE=1024
+            SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 2))
+            RENDER_INTERVAL=$((TOTAL_TIMESTEPS / 4))
+            EVAL_INTERVAL=$((TOTAL_TIMESTEPS / 4))
+            BUFFER_SIZE=8192
 
             # Configure agent-specific parameters
             AGENT_ARGS=( "--agent" "${AGENT}" )
@@ -96,9 +90,9 @@ for seed in "${seeds[@]}"; do
                 --seed "${seed}" \
                 --num_envs ${NUM_TRAIN_ENVS} \
                 --learning_starts 50 \
-                --batch_size 16384 \
+                --batch_size 32768 \
                 --buffer_size ${BUFFER_SIZE} \
-                --num_updates 1 \
+                --num_updates 8 \
                 --num_steps 3 \
                 --no_use_cdq \
                 --std_min 0.05 \
