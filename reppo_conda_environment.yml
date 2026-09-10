@@ -1,0 +1,6 @@
+name: dexmachina
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+prefix: ~/miniconda3/envs/dexmachina
