@@ -6,7 +6,13 @@
 set -e
 
 # --- Auto-activate Conda Environment ---
-eval "$(conda shell.bash hook)"
+if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/anaconda3/etc/profile.d/conda.sh"
+fi
+
+eval "$(conda shell.bash hook 2>/dev/null || true)"
 if [ "$CONDA_DEFAULT_ENV" != "dexmachina_FlashSAC" ]; then
     echo "[INFO] Activating Conda environment 'dexmachina_FlashSAC'..."
     conda activate dexmachina_FlashSAC
@@ -17,7 +23,6 @@ cd "$(dirname "$0")/../FlashSAC" || exit 1
 echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
-
 # --- 1. WandB & Hydra Paths ---
 PROJECT_NAME="dexmachina_clean"
 ENTITY_NAME="schrapsi-kit"
@@ -25,7 +30,7 @@ GROUP_NAME="FlashSAC"
 CONFIG_PATH="configs"
 CONFIG_NAME="flashSAC_base"
 
-# --- 2. Shared Agent Architecture --- (A: Appendix , T: Table from FlashSAC paper)
+# --- 2. Shared Agent Architecture (Table 9 Baseline) ---
 AGENT_NAME="flashSAC"
 ACTOR_HIDDEN_DIM=128    # AT9
 CRITIC_HIDDEN_DIM=256   # AT9
@@ -42,31 +47,45 @@ NUM_ENV_STEPS=50_000_896
 NUM_TRAIN_ENVS=1024 # AT9
 CHECKPOINT_INTERVAL=4882
 USE_CURRICULUM="true"
+SAMPLE_BATCH_SIZE=2048
+USE_AMP="true"
+UPDATES_PER_STEP=2
+GAMMA=0.99
+N_STEP=1
 
-
-# Auto-detect available CUDA devices
+# --- 5. Hardware Device & Buffer Allocation Strategy ---
 NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
 
+# STRATEGY CHOICE:
+# Set to "10M_CPU" for full 10M buffer in System RAM with GPU training (Recommended)
+# Set to "GPU_MAX" for pure VRAM buffer (6M on Dual GPU, 5M on Single GPU)
+BUFFER_MODE="10M_CPU"
+
 if [ "$NUM_GPUS" -gt 1 ]; then
-    echo "[INFO] Detected $NUM_GPUS GPUs. Distributing simulation to cuda:0 and buffer to cuda:1."
+    echo "[INFO] Detected $NUM_GPUS GPUs. Simulation on cuda:0 | Training on cuda:1."
     SIM_DEVICE="cuda:0"
-    BUFFER_DEVICE="cuda:1"
+    AGENT_DEVICE="cuda:1"
+    GPU_BUFFER_MAX=6_000_000
 else
-    echo "[INFO] Detected $NUM_GPUS GPU. Running both simulation and buffer on cuda:0."
+    echo "[INFO] Detected $NUM_GPUS GPU. Simulation and Training on cuda:0."
     SIM_DEVICE="cuda:0"
-    BUFFER_DEVICE="cuda:0"
+    AGENT_DEVICE="cuda:0"
+    GPU_BUFFER_MAX=5_000_000
 fi
 
-BUFFER_MAX_LENGTH=10_000_000   # AT9
-BUFFER_MIN_LENGTH=100_000
-BUFFER_DEVICE="cuda"
-SAMPLE_BATCH_SIZE=2048  # AT9
-USE_AMP="true"
-UPDATES_PER_STEP=2  # AT9
-GAMMA=0.99          # FlashSACs run_isaaclab (using dex hand tasks)
-N_STEP=1      # AT9
+if [ "$BUFFER_MODE" = "10M_CPU" ]; then
+    echo "[INFO] Buffer Strategy: 10M transitions stored in Host RAM (CPU Buffer) with GPU training."
+    BUFFER_DEVICE="cpu"
+    BUFFER_MAX_LENGTH=10_000_000
+else
+    echo "[INFO] Buffer Strategy: Pure VRAM buffer ($GPU_BUFFER_MAX transitions on ${AGENT_DEVICE})."
+    BUFFER_DEVICE="${AGENT_DEVICE}"
+    BUFFER_MAX_LENGTH=${GPU_BUFFER_MAX}
+fi
 
-# --- 5. Benchmark Loops ---
+BUFFER_MIN_LENGTH=100_000
+
+# --- 6. Benchmark Loops ---
 hands=(
     "allegro_hand"
     "dex3_hand"
@@ -132,7 +151,7 @@ for seed in "${seeds[@]}"; do
                 "${SHARED_AGENT_OVERRIDES[@]}" \
                 `#=== Device & Scaling Setup ===#` \
                 --overrides "env.rl_device=${SIM_DEVICE}" \
-                --overrides "agent.device=${BUFFER_DEVICE}" \
+                --overrides "agent.device_type=${AGENT_DEVICE}" \
                 --overrides "agent.buffer_device_type=${BUFFER_DEVICE}" \
                 --overrides "agent.buffer_max_length=${BUFFER_MAX_LENGTH}" \
                 --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
@@ -220,4 +239,4 @@ for seed in "${seeds[@]}"; do
     done
 done
 
-echo "[FINISHED] 10M baseline benchmark run is complete!"
+echo "[FINISHED] Benchmark execution complete!"
