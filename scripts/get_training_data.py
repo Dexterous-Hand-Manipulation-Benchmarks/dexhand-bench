@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 """
-Full progression data exporter for DexMachina + FlashSAC runs.
-Uses argument-free scan_history() with client-side scalar extraction
-to ensure zero-loss capture of all physical and RL telemetry.
+Robust progression data exporter for DexMachina + FlashSAC WandB runs.
+
+Features:
+- Dual-strategy extraction: uses scan_history() for lossless finished runs and
+  automatically falls back to run.history() for active/running runs or if scan_history()
+  stops at <= 1 rows due to cloud sync delays or artifact errors.
+- Robust scalar filtering: strictly filters out dicts, lists, wandb.Table, and media objects.
+- CLI options to target specific runs (--run), newest run (--newest), or limit batch size.
 """
 
-import wandb
+import argparse
+import sys
 import pandas as pd
+import wandb
 
 ENTITY = "schrapsi-kit"
 PROJECT = "dexmachina_clean"
 GROUP = "FlashSAC"
+
 
 def parse_run_number(name: str) -> int:
     try:
@@ -18,7 +26,10 @@ def parse_run_number(name: str) -> int:
     except (ValueError, IndexError):
         return -1
 
+
 def extract_cfg(config: dict, key: str, default=None):
+    if not isinstance(config, dict):
+        return default
     if key in config:
         return config[key]
     bench_key = f"benchmark/{key}"
@@ -29,81 +40,165 @@ def extract_cfg(config: dict, key: str, default=None):
             return config["env"][key]
     return default
 
-def fetch_all_progression_data(entity: str, project: str, group: str) -> pd.DataFrame:
-    api = wandb.Api(timeout=120)
-    runs = api.runs(f"{entity}/{project}", filters={"group": group})
 
-    print(f"[INFO] Found {len(runs)} runs in group '{group}'. Starting export...")
+def is_scalar(v):
+    if v is None:
+        return True
+    if isinstance(v, (int, float, str, bool)):
+        return True
+    type_name = type(v).__name__
+    if any(t in type_name for t in ("int", "float", "bool", "str")):
+        return True
+    return False
+
+
+def clean_history_row(row: dict) -> dict:
+    clean = {}
+    for k, v in row.items():
+        k_str = str(k)
+        # Skip media, video, and table artifacts
+        if k_str.endswith(("video", "table", "media", "images", "image")):
+            continue
+        if any(skip in k_str for skip in ("update_table", "video", "artifact")):
+            continue
+        if is_scalar(v):
+            clean[k] = v
+    return clean
+
+
+def extract_run_history(run, max_samples: int = 100000) -> list[dict]:
+    """
+    Extracts time-series progression history from a run.
+    Uses scan_history() first. If that yields <= 1 rows (standard behavior for
+    active/running runs whose wandb-history.jsonl has not yet flushed to storage,
+    or runs encountering table deserialization issues), it falls back to run.history().
+    """
+    history_rows = []
+
+    # Strategy 1: scan_history() with client-side row cleaning
+    try:
+        for row in run.scan_history(page_size=2000):
+            try:
+                c_row = clean_history_row(row)
+                if c_row:
+                    history_rows.append(c_row)
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"    [INFO] scan_history notice for {run.name}: {e}")
+
+    # Strategy 2: Fallback to run.history() if scan_history returned <= 1 row
+    if len(history_rows) <= 1:
+        print(f"    [INFO] scan_history returned {len(history_rows)} row(s). Falling back to run.history(samples={max_samples})...")
+        try:
+            records = run.history(samples=max_samples, pandas=False)
+            fallback_rows = []
+            for row in records:
+                try:
+                    c_row = clean_history_row(row)
+                    if c_row:
+                        fallback_rows.append(c_row)
+                except Exception:
+                    continue
+            if len(fallback_rows) > len(history_rows):
+                history_rows = fallback_rows
+                print(f"    [SUCCESS] Fallback retrieved {len(history_rows)} steps from active history.")
+        except Exception as e:
+            print(f"    [WARN] run.history fallback failed: {e}")
+
+    return history_rows
+
+
+def fetch_progression_data(
+    entity: str = ENTITY,
+    project: str = PROJECT,
+    group: str = GROUP,
+    target_run: str = None,
+    newest_only: bool = False,
+    limit: int = None,
+    min_runtime: int = 30,
+    include_killed: bool = False,
+) -> pd.DataFrame:
+    api = wandb.Api(timeout=120)
+
+    if target_run:
+        print(f"[INFO] Looking for specific run '{target_run}'...")
+        runs = api.runs(f"{entity}/{project}", filters={"display_name": target_run})
+        if not runs:
+            runs = [r for r in api.runs(f"{entity}/{project}") if r.name == target_run or r.id == target_run]
+        if not runs:
+            raise ValueError(f"Run '{target_run}' not found in {entity}/{project}")
+        runs_to_process = runs[:1]
+    else:
+        filters = {}
+        if group:
+            filters["group"] = group
+        runs = api.runs(f"{entity}/{project}", filters=filters, order="-created_at")
+        print(f"[INFO] Found {len(runs)} runs matching filters={filters}. Starting export...")
+
+        if newest_only:
+            runs_to_process = runs[:1]
+        elif limit:
+            runs_to_process = runs[:limit]
+        else:
+            runs_to_process = runs
 
     all_records = []
     processed_runs = 0
-    last_skipped = False
 
-    for run in runs:
-        run_number = parse_run_number(run.name)
-        # Skip outdated debug runs prior to milestone 100
-        if run_number < 100:
-            if not last_skipped:
-                print(f"[SKIP] Skipping run(s): ({run.name})", end="")
-                last_skipped = True
-                continue
-            print(f", ({run.name})", end="")
-            last_skipped = True
-            continue
-        print("")
-        last_skipped = False
-        # Skip runs killed within initial 2 minutes
+    for run in runs_to_process:
         runtime = run.summary.get("_runtime", getattr(run, "runtime", 0))
-        if getattr(run, "state", "") == "killed" or runtime < 120:
-            print(f"[SKIP] Short/killed run: {run.name}")
-            continue
+        state = getattr(run, "state", "unknown")
 
-        # Extract metadata
-        hand = extract_cfg(run.config, "hand", "unknown")
-        clip = extract_cfg(run.config, "clip", "unknown")
-        seed = extract_cfg(run.config, "seed", "unknown")
-        actor_blocks = extract_cfg(run.config, "actor_blocks", None)
-        critic_blocks = extract_cfg(run.config, "critic_blocks", None)
-        actor_dim = extract_cfg(run.config, "actor_hidden_dim", None)
-        critic_dim = extract_cfg(run.config, "critic_hidden_dim", None)
-        gamma = extract_cfg(run.config, "gamma", None)
+        # Skip short killed runs only if not explicitly targeting a run/newest
+        if not target_run and not newest_only and not include_killed:
+            if state == "killed" and runtime < min_runtime:
+                print(f"[SKIP] Short killed run: {run.name} ({runtime:.1f}s)")
+                continue
+
+        # Extract config metadata
+        config = run.config or {}
+        hand = extract_cfg(config, "hand", "unknown")
+        clip = extract_cfg(config, "clip", "unknown")
+        seed = extract_cfg(config, "seed", "unknown")
+        actor_blocks = extract_cfg(config, "actor_blocks", None)
+        critic_blocks = extract_cfg(config, "critic_blocks", None)
+        actor_dim = extract_cfg(config, "actor_hidden_dim", None)
+        critic_dim = extract_cfg(config, "critic_hidden_dim", None)
+        gamma = extract_cfg(config, "gamma", None)
 
         tags = run.tags if run.tags else []
         param_group = "128d_2blk_params" if ("original_params" in tags or actor_blocks == 2) else "512d_6blk_params"
 
-        print(f"[FETCHING] {run.name:<22} | Hand: {hand:<12} | Clip: {clip:<12} | Seed: {seed:<4} | Group: {param_group}")
+        print(f"\n[FETCHING] {run.name:<22} | State: {state:<9} | Runtime: {runtime:<6.0f}s | Hand: {hand:<12} | Clip: {clip}")
 
-        history_rows = []
-        try:
-            # Crucial: Call scan_history() with NO arguments to fetch all raw logged records
-            for row in run.scan_history():
-                clean_row = {
-                    k: v for k, v in row.items()
-                    if not isinstance(v, dict) and not str(k).endswith("video")
-                }
-                clean_row["run_id"] = run.id
-                clean_row["run_name"] = run.name
-                clean_row["hand"] = hand
-                clean_row["clip"] = clip
-                clean_row["seed"] = seed
-                clean_row["param_group"] = param_group
-                clean_row["actor_blocks"] = actor_blocks
-                clean_row["critic_blocks"] = critic_blocks
-                clean_row["actor_hidden_dim"] = actor_dim
-                clean_row["critic_hidden_dim"] = critic_dim
-                clean_row["gamma"] = gamma
-                history_rows.append(clean_row)
-        except Exception as e:
-            print(f"  -> [ERROR] Failed reading history for {run.name}: {e}")
+        history_rows = extract_run_history(run)
+
+        if not history_rows:
+            print(f"  -> [WARNING] No history records retrieved for {run.name}.")
             continue
 
-        if history_rows:
-            df_run = pd.DataFrame(history_rows)
-            all_records.append(df_run)
-            processed_runs += 1
-            print(f"  -> Successfully extracted {len(df_run)} time-series steps.")
-        else:
-            print(f"  -> [WARNING] No records found for {run.name}.")
+        # Attach metadata to all rows
+        metadata = {
+            "run_id": run.id,
+            "run_name": run.name,
+            "hand": hand,
+            "clip": clip,
+            "seed": seed,
+            "param_group": param_group,
+            "actor_blocks": actor_blocks,
+            "critic_blocks": critic_blocks,
+            "actor_hidden_dim": actor_dim,
+            "critic_hidden_dim": critic_dim,
+            "gamma": gamma,
+        }
+        for r in history_rows:
+            r.update(metadata)
+
+        df_run = pd.DataFrame(history_rows)
+        all_records.append(df_run)
+        processed_runs += 1
+        print(f"  -> Successfully extracted {len(df_run)} progression steps.")
 
     if not all_records:
         raise ValueError("No progression records retrieved across runs.")
@@ -112,8 +207,39 @@ def fetch_all_progression_data(entity: str, project: str, group: str) -> pd.Data
     combined_df = pd.concat(all_records, ignore_index=True)
     return combined_df
 
+
+def main():
+    parser = argparse.ArgumentParser(description="Export progression telemetry from WandB for DexMachina runs.")
+    parser.add_argument("--entity", default=ENTITY, help="WandB entity (default: %(default)s)")
+    parser.add_argument("--project", default=PROJECT, help="WandB project (default: %(default)s)")
+    parser.add_argument("--group", default=GROUP, help="WandB group (default: %(default)s)")
+    parser.add_argument("--run", type=str, default=None, help="Target specific run name or ID (e.g. 'efficient-eon-178')")
+    parser.add_argument("--newest", action="store_true", help="Extract only the single newest run")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of runs to extract")
+    parser.add_argument("--min-runtime", type=int, default=30, help="Minimum runtime in seconds to include (default: 30)")
+    parser.add_argument("--include-killed", action="store_true", help="Include short/killed runs")
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="flashsac_dexmachina_complete_progression.csv",
+        help="Path to save output CSV (default: %(default)s)",
+    )
+    args = parser.parse_args()
+
+    df_progression = fetch_progression_data(
+        entity=args.entity,
+        project=args.project,
+        group=args.group,
+        target_run=args.run,
+        newest_only=args.newest,
+        limit=args.limit,
+        min_runtime=args.min_runtime,
+        include_killed=args.include_killed,
+    )
+
+    df_progression.to_csv(args.output, index=False)
+    print(f"\n[SUCCESS] Saved master dataset to '{args.output}' ({df_progression.shape[0]} rows, {df_progression.shape[1]} columns).")
+
+
 if __name__ == "__main__":
-    df_progression = fetch_all_progression_data(ENTITY, PROJECT, GROUP)
-    output_filename = "flashsac_dexmachina_complete_progression.csv"
-    df_progression.to_csv(output_filename, index=False)
-    print(f"\n[SUCCESS] Saved master dataset to '{output_filename}' ({df_progression.shape[0]} rows, {df_progression.shape[1]} columns).")
+    main()
