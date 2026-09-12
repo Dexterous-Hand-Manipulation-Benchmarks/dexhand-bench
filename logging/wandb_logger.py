@@ -373,6 +373,8 @@ def _interceptor_wandb_init(*args, **kwargs):
     tags = kwargs.get("tags", [])
     if "curriculum" not in tags:
         tags.append("curriculum")
+    if "original_dex_params" not in tags:
+        tags.append("original_dex_params")
     kwargs["tags"] = tags
 
     # Only standardize/inject config during training, never overwrite during evaluation
