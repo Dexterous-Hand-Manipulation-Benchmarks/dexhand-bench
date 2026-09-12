@@ -280,7 +280,7 @@ class UniversalLogger:
             canonical_dict["num_eval_envs"] = int(num_eval)
 
         # Inject into both root level and benchmark/ namespace for flexible W&B grouping
-        unified_config = {}
+        unified_config = dict(cfg)
         for k, v in canonical_dict.items():
             unified_config[k] = v
             unified_config[f"benchmark/{k}"] = v
@@ -375,29 +375,45 @@ def _interceptor_wandb_init(*args, **kwargs):
         tags.append("curriculum")
     kwargs["tags"] = tags
 
-    # 2. Standardize config and inject curriculum flag
-    raw_cfg = kwargs.get("config", {})
-    std_cfg = UniversalLogger.standardize_config(raw_cfg)
-    std_cfg["curriculum"] = True
-    std_cfg["benchmark/curriculum"] = True
-    kwargs["config"] = std_cfg
+    # Only standardize/inject config during training, never overwrite during evaluation
+    is_resumed = kwargs.get("resume") is not None
+    if not UniversalLogger.is_eval and not is_resumed:
+        raw_cfg = kwargs.get("config", {})
+        std_cfg = UniversalLogger.standardize_config(raw_cfg)
+        std_cfg["curriculum"] = True
+        std_cfg["benchmark/curriculum"] = True
+        kwargs["config"] = std_cfg
+    elif UniversalLogger.is_eval:
+        # In evaluation mode, never overwrite the training run's config
+        kwargs.pop("config", None)
+    elif is_resumed and "config" in kwargs:
+        # Resuming training with an explicit config update
+        raw_cfg = kwargs.get("config", {})
+        std_cfg = UniversalLogger.standardize_config(raw_cfg)
+        std_cfg["curriculum"] = True
+        std_cfg["benchmark/curriculum"] = True
+        kwargs["config"] = std_cfg
+
     run = _ORIG_WANDB_INIT(*args, **kwargs)
 
     # Define standard x-axis metric for custom charts
-    wandb.define_metric("global/env_step")
-    wandb.define_metric("global/step")
-    wandb.define_metric("*", step_metric="global/env_step")
-    wandb.define_metric("global/*", step_metric="global/env_step")
-    wandb.define_metric("train/*", step_metric="global/env_step")
-    wandb.define_metric("eval/*", step_metric="global/env_step")
-    wandb.define_metric("env/*", step_metric="global/env_step")
-    wandb.define_metric("perf/*", step_metric="global/env_step")
-    wandb.define_metric("media/*", step_metric="global/env_step")
-    wandb.define_metric("fast_td3/*", step_metric="global/env_step")
-    wandb.define_metric("flash_sac/*", step_metric="global/env_step")
-    wandb.define_metric("ppo/*", step_metric="global/env_step")
-    wandb.define_metric("reppo/*", step_metric="global/env_step")
-    wandb.define_metric("best/*", step_metric="global/env_step")
+    try:
+        wandb.define_metric("global/env_step")
+        wandb.define_metric("global/step")
+        wandb.define_metric("*", step_metric="global/env_step")
+        wandb.define_metric("global/*", step_metric="global/env_step")
+        wandb.define_metric("train/*", step_metric="global/env_step")
+        wandb.define_metric("eval/*", step_metric="global/env_step")
+        wandb.define_metric("env/*", step_metric="global/env_step")
+        wandb.define_metric("perf/*", step_metric="global/env_step")
+        wandb.define_metric("media/*", step_metric="global/env_step")
+        wandb.define_metric("fast_td3/*", step_metric="global/env_step")
+        wandb.define_metric("flash_sac/*", step_metric="global/env_step")
+        wandb.define_metric("ppo/*", step_metric="global/env_step")
+        wandb.define_metric("reppo/*", step_metric="global/env_step")
+        wandb.define_metric("best/*", step_metric="global/env_step")
+    except Exception:
+        pass
 
     return run
 
