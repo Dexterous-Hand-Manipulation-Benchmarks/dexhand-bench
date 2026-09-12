@@ -51,7 +51,7 @@ SAMPLE_BATCH_SIZE=2048
 USE_AMP="true"
 UPDATES_PER_STEP=2
 GAMMA=0.99
-N_STEP=1
+N_STEP=3
 
 # --- 5. Hardware Device & Buffer Allocation Strategy ---
 NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
