@@ -90,7 +90,9 @@ METRIC_MAPPING: Dict[str, str] = {
     "render": "media/train_video"
 }
 
-ALLOWED_NAMESPACES = ("global/", "train/", "eval/", "env/", "perf/", "media/", "best/", "fast_td3/", "flash_sac/", "ppo/", "reppo/")
+ALLOWED_NAMESPACES = (
+    "global/", "train/", "eval/", "env/", "perf/", "media/", "best/", "fast_td3/", "flash_sac/", "ppo/", "reppo/", "curriculum/"
+)
 
 MODEL_SPECIFIC_ALLOWLIST = {
     "fast_td3": {
@@ -118,7 +120,6 @@ MODEL_SPECIFIC_ALLOWLIST = {
     }
 }
 
-# Preserve raw SDK methods before hooking
 _ORIG_WANDB_INIT = wandb.init
 _ORIG_RUN_LOG = wandb.sdk.wandb_run.Run.log
 
@@ -147,7 +148,7 @@ def _to_clean_dict(obj: Any) -> dict:
         return {}
     if isinstance(obj, dict):
         return obj
-    if hasattr(obj, "_content"):  # OmegaConf DictConfig
+    if hasattr(obj, "_content"):
         try:
             from omegaconf import OmegaConf
             return OmegaConf.to_container(obj, resolve=True)
@@ -190,6 +191,7 @@ class UniversalLogger:
         horizon_length: int = 16,
         keep_model_specific: bool = True,
         is_eval: bool = False,
+        **kwargs
     ):
         algo_key = algo.lower().replace("-", "_")
         if algo_key in ("fasttd3", "fast_td3"):
@@ -219,7 +221,6 @@ class UniversalLogger:
     def standardize_config(cls, raw_cfg: Any) -> Dict[str, Any]:
         cfg = _to_clean_dict(raw_cfg)
 
-        # 1. Standard Algorithm Canonical Name
         raw_algo = (
             cls.algo
             or _extract_val(cfg, ("agent", "agent_type"), "agent", "name", ("params", "algo", "name"), "group_name")
@@ -237,12 +238,12 @@ class UniversalLogger:
         else:
             algo_canonical = str(raw_algo).upper()
 
-        # 2. Hand & Clip
         hand = cls.hand or _extract_val(cfg, ("env", "hand"), "hand", ("env", "name"), default="unknown_hand")
         clip = cls.clip or _extract_val(cfg, ("env", "clip"), "clip", default="unknown_clip")
 
         # 3. Seed & Environment Counts (Explicit Train vs Eval)
         seed = cls.seed if cls.seed is not None else _extract_val(cfg, "seed", ("agent", "seed"), ("params", "seed"), default=0)
+
         num_train = cls.num_train_envs or _extract_val(
             cfg, ("env", "num_train_envs"), "num_train_envs", "num_envs", ("hyperparameters", "num_envs"), ("params", "config", "num_actors"), default=1024
         )
@@ -250,7 +251,6 @@ class UniversalLogger:
             cfg, ("env", "num_eval_envs"), "num_eval_envs", "num_eval", default=None
         )
 
-        # 4. Learning Rate & Architecture
         lr = _extract_val(cfg, ("agent", "learning_rate_init"), "actor_learning_rate", ("hyperparameters", "lr"), ("params", "config", "learning_rate"), default=0.0003)
         actor_dim = _extract_val(cfg, ("agent", "actor_hidden_dim"), "actor_hidden_dim", ("hyperparameters", "actor_hidden_dim"), default=512)
         critic_dim = _extract_val(cfg, ("agent", "critic_hidden_dim"), "critic_hidden_dim", ("hyperparameters", "critic_hidden_dim"), default=512)
@@ -259,6 +259,7 @@ class UniversalLogger:
         gamma = _extract_val(cfg, ("agent", "gamma"), ("hyperparameters", "gamma"), "gamma", ("params", "config", "gamma"), default=0.99)
         batch_size = _extract_val(cfg, ("agent", "sample_batch_size"), "batch_size", ("hyperparameters", "num_mini_batches"), ("params", "config", "minibatch_size"), default=2048)
         use_amp = _extract_val(cfg, ("agent", "use_amp"), "amp", ("platform", "amp_enabled"), ("params", "config", "mixed_precision"), default=True)
+        normalize_reward = _extract_val(cfg, ("agent", "normalize_reward"), "reward_normalization", default=False)
 
         canonical_dict = {
             "algo": algo_canonical,
@@ -275,11 +276,11 @@ class UniversalLogger:
             "gamma": float(gamma),
             "batch_size": int(batch_size),
             "use_amp": bool(use_amp),
+            "normalize_reward": bool(normalize_reward),
         }
         if num_eval is not None:
             canonical_dict["num_eval_envs"] = int(num_eval)
 
-        # Inject into both root level and benchmark/ namespace for flexible W&B grouping
         unified_config = dict(cfg)
         for k, v in canonical_dict.items():
             unified_config[k] = v
@@ -354,6 +355,12 @@ class UniversalLogger:
                 mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"media/{key}")
                 sanitized_payload[mapped_key] = raw_val
                 continue
+            # Preserve videos, images, and tables
+            if isinstance(raw_val, (wandb.Video, wandb.Image, wandb.Table)):
+                mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"media/{key}")
+                sanitized_payload[mapped_key] = raw_val
+                continue
+
             val = cls._clean_val(raw_val)
             if val is None:
                 continue
@@ -369,12 +376,9 @@ class UniversalLogger:
 
 def _interceptor_wandb_init(*args, **kwargs):
     """Intercepts wandb.init() to standardize all run configurations."""
-    # Add 'curriculum' to tags
-    tags = kwargs.get("tags", [])
+    tags = list(kwargs.get("tags", []))
     if "curriculum" not in tags:
         tags.append("curriculum")
-    if "original_dex_params" not in tags:
-        tags.append("original_dex_params")
     kwargs["tags"] = tags
 
     # Only standardize/inject config during training, never overwrite during evaluation
