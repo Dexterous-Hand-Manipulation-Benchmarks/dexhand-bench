@@ -54,6 +54,14 @@ TEMP_TARGET_SIGMA=0.35
 GAMMA=0.99
 N_STEP=3
 
+# --- 4b. Dexmachina Ablations & Enhancements ---
+BOOTSTRAP_ON_TIMEOUT="true"
+USE_EFFECTIVE_GAMMA="true"
+ACTOR_INIT_STD=0.3
+INDEPENDENT_ENV_NOISE="true"
+TARGET_ENTROPY_MODE="sac_heuristic"
+NORMALIZE_OBSERVATION="true"
+
 # --- 5. Hardware Device & Buffer Allocation Strategy ---
 NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
 
@@ -123,6 +131,12 @@ for seed in "${seeds[@]}"; do
                 --overrides "agent.actor_num_blocks=${ACTOR_NUM_BLOCKS}"
                 --overrides "agent.critic_num_blocks=${CRITIC_NUM_BLOCKS}"
                 --overrides "agent.asymmetric_observation=${ASYMMETRIC_OBS}"
+                --overrides "agent.bootstrap_on_timeout=${BOOTSTRAP_ON_TIMEOUT}"
+                --overrides "agent.use_effective_gamma=${USE_EFFECTIVE_GAMMA}"
+                --overrides "agent.actor_init_std=${ACTOR_INIT_STD}"
+                --overrides "agent.independent_env_noise=${INDEPENDENT_ENV_NOISE}"
+                --overrides "agent.target_entropy_mode=${TARGET_ENTROPY_MODE}"
+                --overrides "agent.normalize_observation=${NORMALIZE_OBSERVATION}"
             )
 
             SHARED_ENV_OVERRIDES=(
@@ -172,19 +186,20 @@ for seed in "${seeds[@]}"; do
                 --overrides "num_record_episodes=0" \
                 --overrides "++env.curriculum=${USE_CURRICULUM}" \
                 --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}" \
-                `#=== Reward Shaping Weights ===#` \
+                `#=== Reward Shaping Weights (Identical to FastTD3) ===#` \
                 --overrides ++env.reward_cfg.force_penalty=0.1 \
                 --overrides ++env.reward_cfg.action_penalty=0.01 \
+                --overrides ++env.reward_cfg.task_rew_weight=1.0 \
+                --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
+                --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
+                --overrides ++env.reward_cfg.obj_arti_beta=5.0 \
                 --overrides ++env.reward_cfg.imi_rew_weight=0.3 \
                 --overrides ++env.reward_cfg.imi_wrist_weight=0.5 \
                 --overrides ++env.reward_cfg.contact_rew_weight=3.0 \
                 --overrides ++env.reward_cfg.contact_beta=10.0 \
                 --overrides ++env.reward_cfg.bc_rew_weight=0.3 \
                 --overrides ++env.reward_cfg.bc_beta=500.0 \
-                --overrides ++env.reward_cfg.use_retarget_contact=true \
-                --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
-                --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
-                --overrides ++env.reward_cfg.obj_arti_beta=5.0
+                --overrides ++env.reward_cfg.use_retarget_contact=true
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
