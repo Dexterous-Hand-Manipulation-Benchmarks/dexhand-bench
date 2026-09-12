@@ -351,10 +351,6 @@ class UniversalLogger:
         for key, raw_val in data.items():
             if key in ("episode_rew", "checkpoint_step"):
                 continue
-            if isinstance(raw_val, (wandb.Video, wandb.Image)):
-                mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"media/{key}")
-                sanitized_payload[mapped_key] = raw_val
-                continue
             # Preserve videos, images, and tables
             if isinstance(raw_val, (wandb.Video, wandb.Image, wandb.Table)):
                 mapped_key = METRIC_MAPPING.get(key, key if key.startswith(ALLOWED_NAMESPACES) else f"media/{key}")
