@@ -159,8 +159,8 @@ except Exception as e:
               --overrides env.retarget_name="para" \
               --overrides env.num_record_envs=1 \
               --overrides agent.asymmetric_observation=false \
-              --overrides agent.actor_hidden_dim=128 \
-              --overrides agent.critic_hidden_dim=256 \
+              --overrides agent.actor_hidden_dim=256 \
+              --overrides agent.critic_hidden_dim=512 \
               --overrides agent.actor_num_blocks=2 \
               --overrides agent.critic_num_blocks=2
         fi

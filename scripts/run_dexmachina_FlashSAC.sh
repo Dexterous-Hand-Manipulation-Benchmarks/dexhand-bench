@@ -32,10 +32,10 @@ CONFIG_NAME="flashSAC_base"
 
 # --- 2. Shared Agent Architecture (Table 9 Baseline) ---
 AGENT_NAME="flashSAC"
-ACTOR_HIDDEN_DIM=128    # AT9
-CRITIC_HIDDEN_DIM=256   # AT9
-ACTOR_NUM_BLOCKS=2      # AT9
-CRITIC_NUM_BLOCKS=2     # AT9
+ACTOR_HIDDEN_DIM=256    # Scaled to match SimbaV2 capacity
+CRITIC_HIDDEN_DIM=512   # Scaled to match SimbaV2 capacity
+ACTOR_NUM_BLOCKS=2
+CRITIC_NUM_BLOCKS=2
 ASYMMETRIC_OBS="false"
 
 # --- 3. Shared Environment Identity ---
@@ -47,9 +47,10 @@ NUM_ENV_STEPS=50_000_896
 NUM_TRAIN_ENVS=1024 # AT9
 CHECKPOINT_INTERVAL=4882
 USE_CURRICULUM="true"
-SAMPLE_BATCH_SIZE=2048
+SAMPLE_BATCH_SIZE=4096
 USE_AMP="true"
-UPDATES_PER_STEP=2
+UPDATES_PER_STEP=4
+TEMP_TARGET_SIGMA=0.35
 GAMMA=0.99
 N_STEP=3
 
@@ -157,6 +158,7 @@ for seed in "${seeds[@]}"; do
                 --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
                 --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
                 --overrides "agent.use_amp=${USE_AMP}" \
+                --overrides "agent.temp_target_sigma=${TEMP_TARGET_SIGMA}" \
                 --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
                 --overrides "gamma=${GAMMA}" \
                 --overrides "n_step=${N_STEP}" \
