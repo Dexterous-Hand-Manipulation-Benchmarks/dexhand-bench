@@ -32,8 +32,8 @@ CONFIG_NAME="flashSAC_base"
 
 # --- 2. Shared Agent Architecture (Table 9 Baseline) ---
 AGENT_NAME="flashSAC"
-ACTOR_HIDDEN_DIM=256    # Scaled to match SimbaV2 capacity
-CRITIC_HIDDEN_DIM=512   # Scaled to match SimbaV2 capacity
+ACTOR_HIDDEN_DIM=128    #T9
+CRITIC_HIDDEN_DIM=256   #T9
 ACTOR_NUM_BLOCKS=2
 CRITIC_NUM_BLOCKS=2
 ASYMMETRIC_OBS="false"
@@ -50,14 +50,14 @@ USE_CURRICULUM="true"
 SAMPLE_BATCH_SIZE=4096
 USE_AMP="true"
 UPDATES_PER_STEP=4
-TEMP_TARGET_SIGMA=0.35
-GAMMA=0.99
-N_STEP=3
+TEMP_TARGET_SIGMA=0.15 #isaaclab.sh
+GAMMA=0.99  # taken from run_isaaclab.sh
+N_STEP=3    # taken from run_isaaclab.sh
 
 # --- 4b. Dexmachina Ablations & Enhancements ---
-BOOTSTRAP_ON_TIMEOUT="true"
-USE_EFFECTIVE_GAMMA="true"
-ACTOR_INIT_STD=0.3
+BOOTSTRAP_ON_TIMEOUT="false" #like FastTD3
+USE_EFFECTIVE_GAMMA="true"    # correct dynamic discounting for early termination (like FastTD3)
+ACTOR_INIT_STD=0.3  # prevent deterministic initialization stall
 INDEPENDENT_ENV_NOISE="true"
 TARGET_ENTROPY_MODE="sac_heuristic"
 NORMALIZE_OBSERVATION="true"
@@ -151,59 +151,58 @@ for seed in "${seeds[@]}"; do
             echo "========================================================"
 
             # 1. RUN HEADLESS TRAINING
-            if [[ "${run_exp_name}" != "allegro_hand_box-30-230_seed0_10M_official" ]]; then
-              python train.py \
-                  --config_path "${CONFIG_PATH}" \
-                  --config_name "${CONFIG_NAME}" \
-                  --overrides "seed=${seed}" \
-                  `#=== Logging (WandB) ===#` \
-                  --overrides "logger_type=wandb" \
-                  --overrides "project_name=${PROJECT_NAME}" \
-                  --overrides "entity_name=${ENTITY_NAME}" \
-                  --overrides "group_name=${GROUP_NAME}" \
-                  --overrides "exp_name=${run_exp_name}" \
-                  `#=== Architecture & Environment Overrides ===#` \
-                  "${SHARED_ENV_OVERRIDES[@]}" \
-                  "${SHARED_AGENT_OVERRIDES[@]}" \
-                  `#=== Device & Scaling Setup ===#` \
-                  --overrides "env.rl_device=${SIM_DEVICE}" \
-                  --overrides "agent.device_type=${AGENT_DEVICE}" \
-                  --overrides "agent.buffer_device_type=${BUFFER_DEVICE}" \
-                  --overrides "agent.buffer_max_length=${BUFFER_MAX_LENGTH}" \
-                  --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
-                  --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
-                  --overrides "agent.use_amp=${USE_AMP}" \
-                  --overrides "agent.temp_target_sigma=${TEMP_TARGET_SIGMA}" \
-                  --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
-                  --overrides "gamma=${GAMMA}" \
-                  --overrides "n_step=${N_STEP}" \
-                  `#=== Simulation Steps & Checkpointing ===#` \
-                  --overrides "env.env_name=dexmachina/${hand}" \
-                  --overrides "num_env_steps=${NUM_ENV_STEPS}" \
-                  --overrides "num_train_envs=${NUM_TRAIN_ENVS}" \
-                  --overrides "num_eval_envs=null" \
-                  --overrides "num_record_envs=null" \
-                  --overrides "num_eval_episodes=${NUM_TRAIN_ENVS}" \
-                  --overrides "num_record_episodes=0" \
-                  --overrides "++env.curriculum=${USE_CURRICULUM}" \
-                  --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}" \
-                  `#=== Reward Shaping Weights (Identical to FastTD3) ===#` \
-                  --overrides ++env.reward_cfg.force_penalty=0.1 \
-                  --overrides ++env.reward_cfg.action_penalty=0.01 \
-                  --overrides ++env.reward_cfg.task_rew_weight=1.0 \
-                  --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
-                  --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
-                  --overrides ++env.reward_cfg.obj_arti_beta=5.0 \
-                  --overrides ++env.reward_cfg.imi_rew_weight=0.3 \
-                  --overrides ++env.reward_cfg.imi_wrist_weight=0.5 \
-                  --overrides ++env.reward_cfg.contact_rew_weight=3.0 \
-                  --overrides ++env.reward_cfg.contact_beta=10.0 \
-                  --overrides ++env.reward_cfg.bc_rew_weight=0.3 \
-                  --overrides ++env.reward_cfg.bc_beta=500.0 \
-                  --overrides ++env.reward_cfg.use_retarget_contact=true
+            python train.py \
+                --config_path "${CONFIG_PATH}" \
+                --config_name "${CONFIG_NAME}" \
+                --overrides "seed=${seed}" \
+                `#=== Logging (WandB) ===#` \
+                --overrides "logger_type=wandb" \
+                --overrides "project_name=${PROJECT_NAME}" \
+                --overrides "entity_name=${ENTITY_NAME}" \
+                --overrides "group_name=${GROUP_NAME}" \
+                --overrides "exp_name=${run_exp_name}" \
+                `#=== Architecture & Environment Overrides ===#` \
+                "${SHARED_ENV_OVERRIDES[@]}" \
+                "${SHARED_AGENT_OVERRIDES[@]}" \
+                `#=== Device & Scaling Setup ===#` \
+                --overrides "env.rl_device=${SIM_DEVICE}" \
+                --overrides "agent.device_type=${AGENT_DEVICE}" \
+                --overrides "agent.buffer_device_type=${BUFFER_DEVICE}" \
+                --overrides "agent.buffer_max_length=${BUFFER_MAX_LENGTH}" \
+                --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
+                --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
+                --overrides "agent.use_amp=${USE_AMP}" \
+                --overrides "agent.temp_target_sigma=${TEMP_TARGET_SIGMA}" \
+                --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
+                --overrides "gamma=${GAMMA}" \
+                --overrides "n_step=${N_STEP}" \
+                `#=== Simulation Steps & Checkpointing ===#` \
+                --overrides "env.env_name=dexmachina/${hand}" \
+                --overrides "num_env_steps=${NUM_ENV_STEPS}" \
+                --overrides "num_train_envs=${NUM_TRAIN_ENVS}" \
+                --overrides "num_eval_envs=null" \
+                --overrides "num_record_envs=null" \
+                --overrides "num_eval_episodes=${NUM_TRAIN_ENVS}" \
+                --overrides "num_record_episodes=0" \
+                --overrides "++env.curriculum=${USE_CURRICULUM}" \
+                --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}" \
+                `#=== Reward Shaping Weights (Identical to FastTD3) ===#` \
+                --overrides ++env.reward_cfg.force_penalty=0.1 \
+                --overrides ++env.reward_cfg.action_penalty=0.01 \
+                --overrides ++env.reward_cfg.task_rew_weight=1.0 \
+                --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
+                --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
+                --overrides ++env.reward_cfg.obj_arti_beta=5.0 \
+                --overrides ++env.reward_cfg.imi_rew_weight=0.3 \
+                --overrides ++env.reward_cfg.imi_wrist_weight=0.5 \
+                --overrides ++env.reward_cfg.contact_rew_weight=3.0 \
+                --overrides ++env.reward_cfg.contact_beta=10.0 \
+                --overrides ++env.reward_cfg.bc_rew_weight=0.3 \
+                --overrides ++env.reward_cfg.bc_beta=500.0 \
+                --overrides ++env.reward_cfg.use_retarget_contact=true
 
-              echo "[SUCCESS] Training completed for $run_exp_name"
-            fi
+            echo "[SUCCESS] Training completed for $run_exp_name"
+
             # 2. EVALUATION & RENDERING
             echo "[START] Evaluating & Rendering checkpoints for: $run_exp_name"
 
