@@ -32,8 +32,8 @@ CONFIG_NAME="flashSAC_base"
 
 # --- 2. Shared Agent Architecture (Table 9 Baseline) ---
 AGENT_NAME="flashSAC"
-ACTOR_HIDDEN_DIM=128    #T9
-CRITIC_HIDDEN_DIM=256   #T9
+ACTOR_HIDDEN_DIM=256
+CRITIC_HIDDEN_DIM=512
 ACTOR_NUM_BLOCKS=2
 CRITIC_NUM_BLOCKS=2
 ASYMMETRIC_OBS="false"
@@ -55,7 +55,7 @@ GAMMA=0.99  # taken from run_isaaclab.sh
 N_STEP=3    # taken from run_isaaclab.sh
 
 # --- 4b. Dexmachina Ablations & Enhancements ---
-BOOTSTRAP_ON_TIMEOUT="false" #like FastTD3
+BOOTSTRAP_ON_TIMEOUT="true"
 USE_EFFECTIVE_GAMMA="true"    # correct dynamic discounting for early termination (like FastTD3)
 ACTOR_INIT_STD=0.3  # prevent deterministic initialization stall
 INDEPENDENT_ENV_NOISE="true"
