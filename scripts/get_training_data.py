@@ -11,7 +11,11 @@ Features:
 """
 
 import argparse
+import gzip
+import json
+import os
 import sys
+import tempfile
 import pandas as pd
 import wandb
 
@@ -38,6 +42,9 @@ def extract_cfg(config: dict, key: str, default=None):
     if "env" in config and isinstance(config["env"], dict):
         if key in config["env"]:
             return config["env"][key]
+    if "agent" in config and isinstance(config["agent"], dict):
+        if key in config["agent"]:
+            return config["agent"][key]
     return default
 
 
@@ -69,42 +76,90 @@ def clean_history_row(row: dict) -> dict:
 def extract_run_history(run, max_samples: int = 100000) -> list[dict]:
     """
     Extracts time-series progression history from a run.
-    Uses scan_history() first. If that yields <= 1 rows (standard behavior for
-    active/running runs whose wandb-history.jsonl has not yet flushed to storage,
-    or runs encountering table deserialization issues), it falls back to run.history().
+
+    Order of strategies:
+    1. Direct file download of 'wandb-history.jsonl' or 'wandb-history.jsonl.gz':
+       Fastest and completely lossless. Bypasses step-based pagination by downloading
+       the whole event log in a single HTTP request and parsing line-by-line.
+    2. run.history(samples=max_samples, pandas=False):
+       Single GraphQL query. Perfect for active/in-progress runs whose file hasn't flushed yet.
+    3. run.scan_history(page_size=...):
+       Fallback only with adaptive page sizing. (Standard page_size=2000 causes 25,000 requests
+       and freezes when lastHistoryStep is 50,000,000).
     """
     history_rows = []
 
-    # Strategy 1: scan_history() with client-side row cleaning
+    # Strategy 1: Direct file download (wandb-history.jsonl)
     try:
-        for row in run.scan_history(page_size=2000):
+        target_file = None
+        try:
+            for f in run.files():
+                if f.name in ("wandb-history.jsonl", "wandb-history.jsonl.gz"):
+                    target_file = f
+                    break
+        except Exception as fe:
+            print(f"    [INFO] Could not enumerate run.files() for {run.name}: {fe}")
+
+        if target_file is not None and getattr(target_file, "size", 0) > 0:
+            print(f"    [STRATEGY 1] Downloading '{target_file.name}' ({target_file.size / 1024:.1f} KB)...")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                downloaded_file = target_file.download(root=tmpdir, replace=True)
+                local_path = downloaded_file.name
+                downloaded_file.close()
+
+                opener = gzip.open if target_file.name.endswith(".gz") else open
+                with opener(local_path, "rt", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            raw = json.loads(line)
+                            c_row = clean_history_row(raw)
+                            if c_row:
+                                history_rows.append(c_row)
+                        except Exception:
+                            continue
+            if history_rows:
+                print(f"    [SUCCESS] Extracted {len(history_rows)} records from '{target_file.name}'.")
+                return history_rows
+    except Exception as e:
+        print(f"    [INFO] Strategy 1 (file download) skipped for {run.name}: {e}")
+
+    # Strategy 2: Fast sampled history via single GraphQL query
+    print(f"    [STRATEGY 2] Querying run.history(samples={max_samples})...")
+    try:
+        records = run.history(samples=max_samples, pandas=False)
+        fallback_rows = []
+        for row in records:
+            try:
+                c_row = clean_history_row(row)
+                if c_row:
+                    fallback_rows.append(c_row)
+            except Exception:
+                continue
+        if fallback_rows:
+            print(f"    [SUCCESS] Retrieved {len(fallback_rows)} records via run.history().")
+            return fallback_rows
+    except Exception as e:
+        print(f"    [WARN] Strategy 2 (run.history) failed: {e}")
+
+    # Strategy 3: scan_history() with adaptive page size
+    print(f"    [STRATEGY 3] Attempting scan_history with adaptive paging...")
+    try:
+        last_step = getattr(run, "lastHistoryStep", 0) or 0
+        adaptive_page = max(50000, last_step // 20) if last_step > 0 else 50000
+        for row in run.scan_history(page_size=adaptive_page):
             try:
                 c_row = clean_history_row(row)
                 if c_row:
                     history_rows.append(c_row)
             except Exception:
                 continue
+        if history_rows:
+            print(f"    [SUCCESS] Retrieved {len(history_rows)} records via scan_history.")
     except Exception as e:
-        print(f"    [INFO] scan_history notice for {run.name}: {e}")
-
-    # Strategy 2: Fallback to run.history() if scan_history returned <= 1 row
-    if len(history_rows) <= 1:
-        print(f"    [INFO] scan_history returned {len(history_rows)} row(s). Falling back to run.history(samples={max_samples})...")
-        try:
-            records = run.history(samples=max_samples, pandas=False)
-            fallback_rows = []
-            for row in records:
-                try:
-                    c_row = clean_history_row(row)
-                    if c_row:
-                        fallback_rows.append(c_row)
-                except Exception:
-                    continue
-            if len(fallback_rows) > len(history_rows):
-                history_rows = fallback_rows
-                print(f"    [SUCCESS] Fallback retrieved {len(history_rows)} steps from active history.")
-        except Exception as e:
-            print(f"    [WARN] run.history fallback failed: {e}")
+        print(f"    [ERROR] scan_history failed for {run.name}: {e}")
 
     return history_rows
 
@@ -118,8 +173,17 @@ def fetch_progression_data(
     limit: int = None,
     min_runtime: int = 30,
     include_killed: bool = False,
+    api_key: str = None,
 ) -> pd.DataFrame:
-    api = wandb.Api(timeout=120)
+    if api_key:
+        wandb.login(key=api_key)
+
+    try:
+        api = wandb.Api(timeout=120)
+    except Exception as e:
+        print(f"\n[ERROR] Failed to authenticate with WandB: {e}")
+        print("[HINT] Ensure you are logged in via `wandb login` or pass --api-key <KEY>.\n")
+        raise
 
     if target_run:
         print(f"[INFO] Looking for specific run '{target_run}'...")
@@ -158,6 +222,7 @@ def fetch_progression_data(
 
         # Extract config metadata
         config = run.config or {}
+        algo = extract_cfg(config, "algo", "FlashSAC")
         hand = extract_cfg(config, "hand", "unknown")
         clip = extract_cfg(config, "clip", "unknown")
         seed = extract_cfg(config, "seed", "unknown")
@@ -166,6 +231,15 @@ def fetch_progression_data(
         actor_dim = extract_cfg(config, "actor_hidden_dim", None)
         critic_dim = extract_cfg(config, "critic_hidden_dim", None)
         gamma = extract_cfg(config, "gamma", None)
+
+        # Dexmachina ablation configs
+        bootstrap_on_timeout = extract_cfg(config, "bootstrap_on_timeout", None)
+        use_effective_gamma = extract_cfg(config, "use_effective_gamma", None)
+        actor_init_std = extract_cfg(config, "actor_init_std", None)
+        independent_env_noise = extract_cfg(config, "independent_env_noise", None)
+        target_entropy_mode = extract_cfg(config, "target_entropy_mode", None)
+        normalize_observation = extract_cfg(config, "normalize_observation", None)
+        normalize_reward = extract_cfg(config, "normalize_reward", None)
 
         tags = run.tags if run.tags else []
         param_group = "128d_2blk_params" if ("original_params" in tags or actor_blocks == 2) else "512d_6blk_params"
@@ -182,6 +256,7 @@ def fetch_progression_data(
         metadata = {
             "run_id": run.id,
             "run_name": run.name,
+            "algo": algo,
             "hand": hand,
             "clip": clip,
             "seed": seed,
@@ -191,6 +266,13 @@ def fetch_progression_data(
             "actor_hidden_dim": actor_dim,
             "critic_hidden_dim": critic_dim,
             "gamma": gamma,
+            "bootstrap_on_timeout": bootstrap_on_timeout,
+            "use_effective_gamma": use_effective_gamma,
+            "actor_init_std": actor_init_std,
+            "independent_env_noise": independent_env_noise,
+            "target_entropy_mode": target_entropy_mode,
+            "normalize_observation": normalize_observation,
+            "normalize_reward": normalize_reward,
         }
         for r in history_rows:
             r.update(metadata)
@@ -213,11 +295,12 @@ def main():
     parser.add_argument("--entity", default=ENTITY, help="WandB entity (default: %(default)s)")
     parser.add_argument("--project", default=PROJECT, help="WandB project (default: %(default)s)")
     parser.add_argument("--group", default=GROUP, help="WandB group (default: %(default)s)")
-    parser.add_argument("--run", type=str, default=None, help="Target specific run name or ID (e.g. 'efficient-eon-178')")
+    parser.add_argument("--run", type=str, default=None, help="Target specific run name or ID (e.g. 'allegro_hand_box-30-230_seed0_10M_official')")
     parser.add_argument("--newest", action="store_true", help="Extract only the single newest run")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of runs to extract")
     parser.add_argument("--min-runtime", type=int, default=30, help="Minimum runtime in seconds to include (default: 30)")
     parser.add_argument("--include-killed", action="store_true", help="Include short/killed runs")
+    parser.add_argument("--api-key", type=str, default=None, help="WandB API key (or set WANDB_API_KEY env var)")
     parser.add_argument(
         "--output",
         type=str,
@@ -235,6 +318,7 @@ def main():
         limit=args.limit,
         min_runtime=args.min_runtime,
         include_killed=args.include_killed,
+        api_key=args.api_key,
     )
 
     df_progression.to_csv(args.output, index=False)

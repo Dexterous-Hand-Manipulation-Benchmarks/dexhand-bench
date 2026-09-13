@@ -57,29 +57,49 @@ def debug_get_wandb_run():
         print(f"[ERROR] run.scan_history() failed: {e}")
 
 def test_extract_single_run():
-    # Test 1: scan_history() without arguments
-    print("\n--- TEST 1: scan_history() [No Arguments] ---")
-    count_test1 = 0
-    for row in run.scan_history():
-        count_test1 += 1
-    print(f"Result: {count_test1} records yielded.")
+    # Test 1: Direct wandb-history.jsonl file download
+    print("\n--- TEST 1: Direct File Download ('wandb-history.jsonl') ---")
+    import tempfile, json, gzip
+    file_records = []
+    try:
+        target_f = None
+        for f in run.files():
+            if f.name in ("wandb-history.jsonl", "wandb-history.jsonl.gz"):
+                target_f = f
+                break
+        if target_f:
+            print(f"Found {target_f.name} ({target_f.size / 1024:.1f} KB). Downloading...")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                dl = target_f.download(root=tmpdir, replace=True)
+                dl_path = dl.name
+                dl.close()
+                opener = gzip.open if target_f.name.endswith(".gz") else open
+                with opener(dl_path, "rt", encoding="utf-8") as fh:
+                    for line in fh:
+                        if line.strip():
+                            file_records.append(json.loads(line.strip()))
+            print(f"Result: {len(file_records)} records yielded via file download.")
+        else:
+            print("[!] No wandb-history.jsonl file found on run.")
+    except Exception as e:
+        print(f"[ERROR] File download failed: {e}")
 
-    # Test 2: scan_history(keys=...) with media keys included
-    print("\n--- TEST 2: scan_history(keys=...) [Including 'eval/video'] ---")
-    keys_with_media = ["_step", "global/env_step", "eval/return", "eval/video"]
-    count_test2 = 0
-    for row in run.scan_history(keys=keys_with_media):
-        count_test2 += 1
-    print(f"Result: {count_test2} records yielded.")
+    # Test 2: run.history(samples=5000, pandas=False)
+    print("\n--- TEST 2: run.history(samples=5000) [GraphQL single request] ---")
+    try:
+        hist = run.history(samples=5000, pandas=False)
+        print(f"Result: {len(hist)} records yielded via run.history().")
+    except Exception as e:
+        print(f"[ERROR] run.history() failed: {e}")
 
     # Test 3: Client-side filtering of scalar metrics
-    print("\n--- TEST 3: scan_history() with client-side scalar extraction ---")
+    print("\n--- TEST 3: Client-side scalar extraction ---")
+    records_to_use = file_records if file_records else run.history(samples=5000, pandas=False)
     records = []
-    for row in run.scan_history():
-        # Remove complex media dictionaries (videos/images) from row
+    for row in records_to_use:
         clean_row = {
             k: v for k, v in row.items()
-            if not isinstance(v, dict) and not k.endswith("video")
+            if not isinstance(v, dict) and not str(k).endswith(("video", "table", "media", "image"))
         }
         records.append(clean_row)
 
@@ -96,15 +116,17 @@ def test_extract_single_run():
     ]
 
     # Display non-null rows
-    sample_df = df[display_cols].dropna(how="all").head(5)
-    print(sample_df.to_string(index=False))
+    if display_cols:
+        sample_df = df[display_cols].dropna(how="all").head(5)
+        print(sample_df.to_string(index=False))
 
     print("\n" + "=" * 60)
-    if count_test1 > 0 and len(df) > 0:
-        print("[UNIT TEST PASSED] History data is fully accessible via client-side filtering.")
+    if len(df) > 0:
+        print("[UNIT TEST PASSED] History data is fully accessible.")
     else:
         print("[UNIT TEST FAILED] Unable to extract history rows.")
     print("=" * 60)
 
 if __name__ == "__main__":
+    debug_get_wandb_run()
     test_extract_single_run()
