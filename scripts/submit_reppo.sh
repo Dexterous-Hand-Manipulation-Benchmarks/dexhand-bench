@@ -2,8 +2,8 @@
 #SBATCH --job-name=dexmachina_reppo
 #SBATCH --output=logs/slurm_%j.out
 #SBATCH --error=logs/slurm_%j.err
-#SBATCH --time=00:30:00                     # Time limit (30 mins max for dev queues)
-#SBATCH --partition=dev_gpu_a100_il         # Fast development GPU partition (change for production)
+#SBATCH --time=16:00:00                     # Time limit (30 mins max for dev queues)
+#SBATCH --partition=gpu_a100_il       # Fast development GPU partition (change for production)
 #SBATCH --gres=gpu:1                        # Request 1 GPU (Genesis/JAX require GPU)
 #SBATCH --cpus-per-task=16                  # Recommended CPU count per GPU task
 #SBATCH --ntasks=1

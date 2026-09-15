@@ -40,7 +40,7 @@ debugpy==1.8.21
 decorator==5.3.1
 defusedxml==0.7.1
 Deprecated==1.3.1
--e git+ssh://git@github.com/alex-jke/dexmachina_sac.git@7f7236e20330375effa0eb1f7079eda4589f1364#egg=dexmachina&subdirectory=dexmachina
+#-e git+ssh://git@github.com/alex-jke/dexmachina_sac.git@7f7236e20330375effa0eb1f7079eda4589f1364#egg=dexmachina&subdirectory=dexmachina
 dill==0.4.1
 distrax==0.1.5
 dm-tree==0.1.10
@@ -59,7 +59,7 @@ fqdn==1.5.1
 freetype-py==2.5.1
 fsspec==2026.7.0
 gast==0.7.0
--e git+ssh://git@github.com/alex-jke/dexmachina_sac.git@7f7236e20330375effa0eb1f7079eda4589f1364#egg=genesis_world&subdirectory=genesis
+#-e git+ssh://git@github.com/alex-jke/dexmachina_sac.git@7f7236e20330375effa0eb1f7079eda4589f1364#egg=genesis_world&subdirectory=genesis
 gitdb==4.0.12
 GitPython==3.1.58
 glfw==2.10.2
@@ -209,7 +209,7 @@ PyGEL3D==0.6.1
 pyglet==2.1.16
 pygltflib==1.16.0
 Pygments==2.20.0
-pymeshlab==2025.7.post1
+pymeshlab==2023.12.post3
 PyOpenGL==3.1.10
 pyparsing==3.3.2
 pyperclip==1.11.0
@@ -226,7 +226,6 @@ PyYAML==6.0.3
 pyzmq==27.1.0
 ray==2.56.1
 referencing==0.37.0
--e git+ssh://git@github.com/blin-1095/reppo.git@78041fb3c49fb4666e0e5e02dab050b0f5fbc573#egg=reppo&subdirectory=../../reppo
 requests==2.34.2
 rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1

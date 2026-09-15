@@ -4,3 +4,4 @@
 *.nbi
 wandb-settings
 temp.md
+logs/*
