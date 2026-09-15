@@ -19,6 +19,17 @@ METRIC_MAPPING: Dict[str, str] = {
     "ADD": "eval/add",
     "add_mean": "eval/add",
     "eval/add": "eval/add",
+    # ADD-based success (paper definition: mean per-vertex mesh distance below the
+    # threshold) is a DIFFERENT metric from success_*, which FastTD3's
+    # envs/FastTD3/dexmachina_wrapper.py computes as a conjunction
+    # (pos < p) & (rot < r) & (arti < a). Keep them on separate panels so the two
+    # are never silently overlaid on one chart.
+    "add_success_1cm": "eval/add_success_1cm",
+    "add_success_2cm": "eval/add_success_2cm",
+    "add_success_5cm": "eval/add_success_5cm",
+    "eval/add_success_1cm": "eval/add_success_1cm",
+    "eval/add_success_2cm": "eval/add_success_2cm",
+    "eval/add_success_5cm": "eval/add_success_5cm",
     "success_2cm": "eval/success_2cm",
     "success_5cm": "eval/success_5cm",
     "eval/success_2cm": "eval/success_2cm",
