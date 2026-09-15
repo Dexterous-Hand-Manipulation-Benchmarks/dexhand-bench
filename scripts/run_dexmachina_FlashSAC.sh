@@ -107,7 +107,8 @@ clips=(
     "mixer-0-150"
 )
 
-seeds=( 0 1000 2000 )
+# Seed 0 is fully completed. Continuing from failed Seed 1000 run (xhand_box-30-230) through Seed 2000.
+seeds=( 1000 2000 )
 
 # Execution of runs
 for seed in "${seeds[@]}"; do
@@ -122,6 +123,19 @@ for seed in "${seeds[@]}"; do
             if [ ! -f "$data_file" ]; then
                 echo "[SKIP] Retarget data not found: ${hand} + ${obj_name}. Moving to next..."
                 continue
+            fi
+
+            # Check if experiment already completed (final milestone checkpoint exists)
+            COMPLETED_CKPT=$(find "models/FlashSAC/${run_exp_name}" -mindepth 2 -maxdepth 4 -type d -name "step4882*" 2>/dev/null | head -n 1)
+            if [ -n "$COMPLETED_CKPT" ]; then
+                echo "[SKIP] Experiment ${run_exp_name} already completed (${COMPLETED_CKPT} found). Moving to next..."
+                continue
+            fi
+
+            # Clean up incomplete runs before restarting (e.g. from previous crash)
+            if [ -d "models/FlashSAC/${run_exp_name}" ] && [ -z "$COMPLETED_CKPT" ]; then
+                echo "[RESUME/CLEANUP] Found incomplete run directory for ${run_exp_name}. Cleaning incomplete checkpoints before restarting..."
+                rm -rf "models/FlashSAC/${run_exp_name}"
             fi
 
             SHARED_AGENT_OVERRIDES=(
