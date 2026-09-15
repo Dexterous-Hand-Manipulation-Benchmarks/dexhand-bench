@@ -94,49 +94,39 @@ fi
 
 BUFFER_MIN_LENGTH=100_000
 
-# --- 6. Benchmark Loops ---
-hands=(
-    "allegro_hand"
-    "dex3_hand"
-    "inspire_hand"
-    "xhand"
+# --- 6. Explicit Benchmark Execution Queue ---
+# Seed 0 (all 6 runs) and Seed 1000 (first 5 runs) have completed successfully.
+# The queue below executes the remaining 7 runs: the failed Seed 1000 run and the full Seed 2000 suite.
+RUN_QUEUE=(
+    "1000 xhand box-30-230"
+    "2000 allegro_hand box-30-230"
+    "2000 allegro_hand mixer-0-150"
+    "2000 dex3_hand box-30-230"
+    "2000 inspire_hand box-30-230"
+    "2000 inspire_hand mixer-0-150"
+    "2000 xhand box-30-230"
 )
-
-clips=(
-    "box-30-230"
-    "mixer-0-150"
-)
-
-# Seed 0 is fully completed. Continuing from failed Seed 1000 run (xhand_box-30-230) through Seed 2000.
-seeds=( 1000 2000 )
 
 # Execution of runs
-for seed in "${seeds[@]}"; do
-    for hand in "${hands[@]}"; do
-        for clip in "${clips[@]}"; do
+for run_item in "${RUN_QUEUE[@]}"; do
+    read -r seed hand clip <<< "$run_item"
 
-            run_exp_name="${hand}_${clip}_seed${seed}_10M_official"
+    run_exp_name="${hand}_${clip}_seed${seed}_10M_official"
 
-            obj_name=$(echo "$clip" | cut -d'-' -f1)
-            data_file="../dexmachina/dexmachina/assets/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
+    obj_name=$(echo "$clip" | cut -d'-' -f1)
+    data_file="../dexmachina/dexmachina/assets/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
 
-            if [ ! -f "$data_file" ]; then
-                echo "[SKIP] Retarget data not found: ${hand} + ${obj_name}. Moving to next..."
-                continue
-            fi
+    if [ ! -f "$data_file" ]; then
+        echo "[SKIP] Retarget data not found: ${hand} + ${obj_name}. Moving to next..."
+        continue
+    fi
 
-            # Check if experiment already completed (final milestone checkpoint exists)
-            COMPLETED_CKPT=$(find "models/FlashSAC/${run_exp_name}" -mindepth 2 -maxdepth 4 -type d -name "step4882*" 2>/dev/null | head -n 1)
-            if [ -n "$COMPLETED_CKPT" ]; then
-                echo "[SKIP] Experiment ${run_exp_name} already completed (${COMPLETED_CKPT} found). Moving to next..."
-                continue
-            fi
-
-            # Clean up incomplete runs before restarting (e.g. from previous crash)
-            if [ -d "models/FlashSAC/${run_exp_name}" ] && [ -z "$COMPLETED_CKPT" ]; then
-                echo "[RESUME/CLEANUP] Found incomplete run directory for ${run_exp_name}. Cleaning incomplete checkpoints before restarting..."
-                rm -rf "models/FlashSAC/${run_exp_name}"
-            fi
+    # Check if this run was already completed in the current campaign (milestone results directory exists)
+    COMPLETED_RESULTS=$(find "models/FlashSAC/${run_exp_name}" -mindepth 3 -maxdepth 5 -type d -name "*results" 2>/dev/null | head -n 1)
+    if [ -n "$COMPLETED_RESULTS" ]; then
+        echo "[SKIP] Experiment ${run_exp_name} already completed (${COMPLETED_RESULTS} found). Moving to next..."
+        continue
+    fi
 
             SHARED_AGENT_OVERRIDES=(
                 --overrides "agent=${AGENT_NAME}"
@@ -261,13 +251,10 @@ for seed in "${seeds[@]}"; do
                 else
                     echo "[PRESERVE] Keeping final milestone checkpoint: ${STEP_DIR}"
                 fi
-            done
-
-            echo "[SUCCESS] Milestone evaluations completed for $run_exp_name"
-            echo "--------------------------------------------------------"
-
         done
-    done
+        echo "[SUCCESS] Milestone evaluations completed for $run_exp_name"
+        echo "--------------------------------------------------------"
+
 done
 
 echo "[FINISHED] Benchmark execution complete!"
