@@ -19,6 +19,17 @@ METRIC_MAPPING: Dict[str, str] = {
     "ADD": "eval/add",
     "add_mean": "eval/add",
     "eval/add": "eval/add",
+    # ADD-based success (paper definition: mean per-vertex mesh distance below the
+    # threshold) is a DIFFERENT metric from success_*, which FastTD3's
+    # envs/FastTD3/dexmachina_wrapper.py computes as a conjunction
+    # (pos < p) & (rot < r) & (arti < a). Keep them on separate panels so the two
+    # are never silently overlaid on one chart.
+    "add_success_1cm": "eval/add_success_1cm",
+    "add_success_2cm": "eval/add_success_2cm",
+    "add_success_5cm": "eval/add_success_5cm",
+    "eval/add_success_1cm": "eval/add_success_1cm",
+    "eval/add_success_2cm": "eval/add_success_2cm",
+    "eval/add_success_5cm": "eval/add_success_5cm",
     "success_2cm": "eval/success_2cm",
     "success_5cm": "eval/success_5cm",
     "eval/success_2cm": "eval/success_2cm",
@@ -41,6 +52,12 @@ METRIC_MAPPING: Dict[str, str] = {
     "length/iter": "train/ep_length",
     "length/test": "eval/ep_length",
     "eval_avg_length": "eval/ep_length",
+
+    ## REPPO mappings
+    "eval/episode_return": "eval/return",
+    "eval/episode_length": "eval/ep_length",
+    "train/episode_return": "train/return",
+    "train/episode_length": "train/ep_length",
 
     # Physical Errors, Forces & Gains
     "contact_force": "env/contact_force",
@@ -74,6 +91,11 @@ METRIC_MAPPING: Dict[str, str] = {
     "learning_rate": "train/learning_rate",
     "actor/mean_action": "flash_sac/mean_action",
     "critic/max_entropy_bonus": "flash_sac/max_entropy_bonus",
+
+    ## REPPO mappings
+    "train/entropy": "train/entropy",
+    "train/critic_loss": "train/critic_loss",
+    "train/actor_loss": "train/actor_loss",
 
     # System
     "fps/total": "perf/fps",
@@ -116,7 +138,22 @@ MODEL_SPECIFIC_ALLOWLIST = {
         "info/last_lr": "ppo/learning_rate"
     },
     "reppo": {
-        "measure_burnin": "reppo/measure_burnin"
+        "train/q": "reppo/q_value",
+        "train/temp": "reppo/temperature",
+        "train/kl": "reppo/kl_divergence",
+        "train/lagrangian": "reppo/lagrangian",
+        "train/lagrangian_loss": "reppo/lagrangian_loss",
+        "train/entropy_loss": "reppo/entropy_loss",
+        "train/abs_batch_action": "reppo/abs_batch_action",
+        "train/abs_pred_action": "reppo/abs_pred_action",
+        "train/critic_update_loss": "reppo/critic_update_loss",
+        "train/aux_loss": "reppo/aux_loss",
+        "train/rew_aux_loss": "reppo/rew_aux_loss",
+        "train/target_values": "reppo/target_values",
+        "train/reward_mean": "reppo/reward_mean",
+        "train/value_loss": "reppo/mse_loss",
+        "train/critic_total_loss": "reppo/critic_total_loss",
+        "train/actor_total_loss": "reppo/actor_total_loss",
     }
 }
 
@@ -360,12 +397,18 @@ class UniversalLogger:
             val = cls._clean_val(raw_val)
             if val is None:
                 continue
+                
+            # 1. Global mapping (Highest Priority)
             if key in METRIC_MAPPING:
                 sanitized_payload[METRIC_MAPPING[key]] = val
-            elif key.startswith(ALLOWED_NAMESPACES):
-                sanitized_payload[key] = val
+                
+            # 2. Algorithm-Specific overrides (Second Priority)
             elif cls.keep_model_specific and key in cls.algo_specific_map:
                 sanitized_payload[cls.algo_specific_map[key]] = val
+
+            # 3. Generic wildcard fallback (Lowest Priority)
+            elif key.startswith(ALLOWED_NAMESPACES):
+                sanitized_payload[key] = val
 
         return sanitized_payload
 

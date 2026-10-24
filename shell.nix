@@ -1,38 +1,66 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ pkgs ? import <nixpkgs> {
+    config = {
+      allowUnfree = true;
+    };
+  }
+}:
 
 let
-  conda-fhs = pkgs.buildFHSEnv {
-    name = "dexmachina-fhs";
-
-    # These packages will be linked into standard Linux paths (like /lib and /usr/lib)
-    # so that pre-compiled Python wheels (like cv2, PyTorch) can find them.
-    targetPkgs = pkgs: with pkgs; [
-      conda
-      glib             # Fixes: libgthread-2.0.so.0
-      
-      # Graphics & UI dependencies often needed by cv2 and 3D visualizers
-      libGL
-      libGLU
-      libX11
-      libXext
-      libXrender
-      libSM
-      libICE
-      
-      # Standard system libraries
-      zlib
-      stdenv.cc.cc.lib # Provides libstdc++.so.6
-    ];
-
-    # This runs every time you enter the shell
-    profile = ''
-      # Initialize conda so the 'conda activate' command works immediately
-      eval "$(conda shell.bash hook)"
-      
-      # Optional: Auto-activate your specific environment
-      conda-shell 
-     
-    '';
-  };
+  # Defaults to ~/miniconda3; set CONDA_DIR to use a different install (e.g. ~/miniforge3)
+  condaDirEnv = builtins.getEnv "CONDA_DIR";
+  condaDir = if condaDirEnv != "" then condaDirEnv else "${builtins.getEnv "HOME"}/miniconda3";
+  envName = "dexmachina";
 in
-conda-fhs.env
+pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
+  nativeBuildInputs = with pkgs; [
+    gcc
+    gnumake
+    pkg-config
+    cmake
+    wget
+    curl
+  ];
+
+  buildInputs = with pkgs; [
+    glibc.dev
+    zlib
+    mesa
+    cacert
+    patchelf
+    stdenv.cc.cc.lib
+    alsa-lib
+    vulkan-loader
+    glib
+
+    # Graphics & UI dependencies often needed by cv2 and 3D visualizers
+    libGL
+    libGLU
+    xorg.libX11
+    xorg.libXext
+    xorg.libXrender
+    xorg.libSM
+    xorg.libICE
+  ];
+
+  GLIBC_TUNABLES = "glibc.rtld.execstack=2";
+
+  shellHook = ''
+    export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+    export LD_LIBRARY_PATH="${pkgs.glib.out}/lib:/run/opengl-driver/lib:/run/opengl-driver-32/lib:${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.libGL}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.xorg.libX11}/lib:${pkgs.xorg.libXrender}/lib:${pkgs.xorg.libXext}/lib:$LD_LIBRARY_PATH"
+    export MUJOCO_GL=egl
+
+    # Source conda base profile
+    if [ -f "${condaDir}/etc/profile.d/conda.sh" ]; then
+      source "${condaDir}/etc/profile.d/conda.sh"
+    else
+      echo "ERROR: Conda not found at ${condaDir}" >&2
+      exit 1
+    fi
+
+    # Force-activate the environment and put its bin first in PATH
+    conda activate "${envName}"
+    export PATH="${condaDir}/envs/${envName}/bin:$PATH"
+
+    echo "Conda environment '${envName}' active and ready!"
+  '';
+}

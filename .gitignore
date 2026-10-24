@@ -1,4 +1,9 @@
 .idea
+.direnv
 wandb
+wandb-settings
 logs
-
+*.pyc
+*.nbc
+*.nbi
+temp.md
