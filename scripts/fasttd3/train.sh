@@ -4,11 +4,10 @@
 ##################################################################################
 
 set -e
-source .venv/bin/activate
+DHB_EXTRA=fasttd3
+source "$(dirname "$0")/../common.sh"
+cd "${DHB_ROOT}/algorithms/FastTD3" || exit 1
 
-cd "$(dirname "$0")/../FastTD3" || exit 1
-
-echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
 # --- Algorithm Selection ---
@@ -38,7 +37,7 @@ for seed in "${seeds[@]}"; do
 
             # Extract the object name to safely check if retarget data exists
             obj_name=$(echo "$clip" | cut -d'-' -f1)
-            data_file="../dexmachina/dexmachina/assets/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
+            data_file="${DEXMACHINA_ASSETS}/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
 
             if [ ! -f "$data_file" ]; then
                 echo "[SKIP] Retarget data not found: ${hand} + ${obj_name}. Moving to next..."
@@ -83,8 +82,7 @@ for seed in "${seeds[@]}"; do
             python fast_td3/train.py \
                 --env_name "dexmachina|${hand}|${clip}" \
                 --exp_name "${run_exp_name}" \
-                --project "dexmachina" \
-                --entity "schrapsi-kit" \
+                --project "${WANDB_PROJECT}" \
                 --group_name "${GROUP_NAME}" \
                 "${AGENT_ARGS[@]}" \
                 --seed "${seed}" \
@@ -143,7 +141,7 @@ for seed in "${seeds[@]}"; do
                 ENV_STEP=$(( STEP_NUM * NUM_TRAIN_ENVS ))
                 echo "[INFO] Evaluating intermediate checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
 
-                python ../envs/FastTD3/eval_fast_td3.py \
+                python fast_td3/eval_dexmachina.py \
                     --checkpoint "$CKPT" \
                     --num_envs 20 \
                     --env_name "dexmachina|${hand}|${clip}" \
@@ -157,7 +155,7 @@ for seed in "${seeds[@]}"; do
                 BEST_CKPT="${LATEST_TS_DIR}/best.pt"
                 echo "[INFO] Evaluating best checkpoint: ${BEST_CKPT} (Reading true saved step from metadata)"
 
-                python ../envs/FastTD3/eval_fast_td3.py \
+                python fast_td3/eval_dexmachina.py \
                     --checkpoint "$BEST_CKPT" \
                     --num_envs 20 \
                     --env_name "dexmachina|${hand}|${clip}" \
@@ -168,7 +166,7 @@ for seed in "${seeds[@]}"; do
                 TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
                 echo "[INFO] Evaluating fallback final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
 
-                python ../envs/FastTD3/eval_fast_td3.py \
+                python fast_td3/eval_dexmachina.py \
                     --checkpoint "$FINAL_CKPT" \
                     --num_envs 20 \
                     --env_name "dexmachina|${hand}|${clip}" \

@@ -1,19 +1,23 @@
 import os
+import sys
 import glob
 import subprocess
 import wandb
 
 # --- W&B Target Configuration ---
-ENTITY = "schrapsi-kit"
-PROJECT = "dexmachina"
+from dexhand_bench.config import ROOT, load_config, wandb_settings
+
+_wandb = wandb_settings(load_config())
+ENTITY = _wandb["WANDB_ENTITY"] or None  # None: your W&B default entity
+PROJECT = _wandb["WANDB_PROJECT"]
 GROUP_NAME = "FlashSAC"
 
 # --- Path Setup ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-MODELS_BASE_DIR = os.path.join(PROJECT_ROOT, "FlashSAC", "models", "FlashSAC")
-EVAL_SCRIPT = os.path.join(PROJECT_ROOT, "envs", "FlashSAC", "eval_and_render.py")
-CONFIG_DIR = os.path.join(PROJECT_ROOT, "FlashSAC", "configs")
+FLASHSAC_DIR = os.path.join(ROOT, "algorithms", "FlashSAC")
+MODELS_BASE_DIR = os.path.join(FLASHSAC_DIR, "models", "FlashSAC")
+EVAL_SCRIPT = os.path.join(FLASHSAC_DIR, "eval_dexmachina.py")
+CONFIG_DIR = os.path.join(FLASHSAC_DIR, "configs")
 
 
 def get_config_val(run_config, key_path, default=None):
@@ -34,7 +38,7 @@ def main():
     api = wandb.Api()
     print(f"[INFO] Fetching runs from W&B ({ENTITY}/{PROJECT}) filtered by group '{GROUP_NAME}'...")
 
-    runs = api.runs(f"{ENTITY}/{PROJECT}", filters={"config.group_name": GROUP_NAME})
+    runs = api.runs(f"{ENTITY or api.default_entity}/{PROJECT}", filters={"config.group_name": GROUP_NAME})
     print(f"[INFO] Found {len(runs)} runs matching criteria.")
 
     runs = reversed(runs)
@@ -90,7 +94,7 @@ def main():
             print(f"  -> [EVAL] Evaluating and Rendering Step {step_num}...")
 
             cmd = [
-                "python", EVAL_SCRIPT,
+                sys.executable, EVAL_SCRIPT,
                 "--config_path", CONFIG_DIR,
                 "--checkpoint_path", step_path,
                 "--wandb_run_id", run.id,
@@ -109,7 +113,7 @@ def main():
             ]
 
             try:
-                subprocess.run(cmd, check=True, cwd=os.path.join(PROJECT_ROOT, "FlashSAC"))
+                subprocess.run(cmd, check=True, cwd=FLASHSAC_DIR)
             except subprocess.CalledProcessError as e:
                 print(f"  -> [ERROR] Evaluation crashed for {step_path}: {e}")
 

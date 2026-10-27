@@ -19,8 +19,11 @@ import tempfile
 import pandas as pd
 import wandb
 
-ENTITY = "schrapsi-kit"
-PROJECT = "dexmachina_clean"
+from dexhand_bench.config import load_config, wandb_settings
+
+_wandb = wandb_settings(load_config())
+ENTITY = _wandb["WANDB_ENTITY"] or None  # None: your W&B default entity
+PROJECT = _wandb["WANDB_PROJECT"]
 GROUP = "FlashSAC"
 
 
@@ -180,6 +183,7 @@ def fetch_progression_data(
 
     try:
         api = wandb.Api(timeout=120)
+        entity = entity or api.default_entity
     except Exception as e:
         print(f"\n[ERROR] Failed to authenticate with WandB: {e}")
         print("[HINT] Ensure you are logged in via `wandb login` or pass --api-key <KEY>.\n")
@@ -294,7 +298,7 @@ def main():
     parser = argparse.ArgumentParser(description="Export progression telemetry from WandB for DexMachina runs.")
     parser.add_argument("--entity", default=ENTITY, help="WandB entity (default: %(default)s)")
     parser.add_argument("--project", default=PROJECT, help="WandB project (default: %(default)s)")
-    parser.add_argument("--group", default=GROUP, help="WandB group (default: %(default)s)")
+    parser.add_argument("--group", default=GROUP, help="WandB group, or 'all' for every group (default: %(default)s)")
     parser.add_argument("--run", type=str, default=None, help="Target specific run name or ID (e.g. 'allegro_hand_box-30-230_seed0_10M_official')")
     parser.add_argument("--newest", action="store_true", help="Extract only the single newest run")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of runs to extract")
@@ -304,15 +308,18 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="flashsac_dexmachina_complete_progression.csv",
-        help="Path to save output CSV (default: %(default)s)",
+        default=None,
+        help="Path to save output CSV (default: <group>_dexmachina_complete_progression.csv)",
     )
     args = parser.parse_args()
+    group = None if args.group.lower() == "all" else args.group
+    if args.output is None:
+        args.output = f"{(group or 'all').lower()}_dexmachina_complete_progression.csv"
 
     df_progression = fetch_progression_data(
         entity=args.entity,
         project=args.project,
-        group=args.group,
+        group=group,
         target_run=args.run,
         newest_only=args.newest,
         limit=args.limit,

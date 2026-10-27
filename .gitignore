@@ -1,9 +1,35 @@
-.idea
-.direnv
-wandb
+# Claude Code (local only)
+.claude/
+CLAUDE.md
+
+# Personal benchmark settings
+configs/local.yaml
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Experiment outputs
+wandb/
 wandb-settings
-logs
-*.pyc
+logs/
+outputs/
+models/
+*.csv
+
+# Secrets
+.env
+.env.*
+
+# Editors, OS, nix
+.DS_Store
+.idea/
+.vscode/
+.direnv/
 *.nbc
 *.nbi
 temp.md

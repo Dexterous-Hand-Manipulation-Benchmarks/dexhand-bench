@@ -1,12 +1,17 @@
+import sys
+
 import wandb
 import pandas as pd
 
-ENTITY = "schrapsi-kit"
-PROJECT = "dexmachina_clean"
+from dexhand_bench.config import load_config, wandb_settings
+
+_wandb = wandb_settings(load_config())
 GROUP = "FlashSAC"
-RUN_ID_OR_NAME = "jumping-bee-137"
+RUN_ID_OR_NAME = sys.argv[1] if len(sys.argv) > 1 else "jumping-bee-137"
 
 api = wandb.Api()
+ENTITY = _wandb["WANDB_ENTITY"] or api.default_entity
+PROJECT = _wandb["WANDB_PROJECT"]
 
 print(f"[*] Querying run: {RUN_ID_OR_NAME} in {ENTITY}/{PROJECT}...")
 runs = api.runs(f"{ENTITY}/{PROJECT}", filters={"display_name": RUN_ID_OR_NAME})

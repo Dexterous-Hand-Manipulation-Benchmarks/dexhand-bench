@@ -5,12 +5,8 @@
   }
 }:
 
-let
-  # Defaults to ~/miniconda3; set CONDA_DIR to use a different install (e.g. ~/miniforge3)
-  condaDirEnv = builtins.getEnv "CONDA_DIR";
-  condaDir = if condaDirEnv != "" then condaDirEnv else "${builtins.getEnv "HOME"}/miniconda3";
-  envName = "dexmachina";
-in
+# Optional NixOS helper: system libraries for the uv-managed Python environment.
+# Usage: nix-shell (or `direnv allow` with .envrc), then `uv sync --extra <method>`.
 pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
   nativeBuildInputs = with pkgs; [
     gcc
@@ -19,6 +15,7 @@ pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
     cmake
     wget
     curl
+    uv
   ];
 
   buildInputs = with pkgs; [
@@ -49,18 +46,6 @@ pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
     export LD_LIBRARY_PATH="${pkgs.glib.out}/lib:/run/opengl-driver/lib:/run/opengl-driver-32/lib:${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.libGL}/lib:${pkgs.libglvnd}/lib:${pkgs.mesa}/lib:${pkgs.xorg.libX11}/lib:${pkgs.xorg.libXrender}/lib:${pkgs.xorg.libXext}/lib:$LD_LIBRARY_PATH"
     export MUJOCO_GL=egl
 
-    # Source conda base profile
-    if [ -f "${condaDir}/etc/profile.d/conda.sh" ]; then
-      source "${condaDir}/etc/profile.d/conda.sh"
-    else
-      echo "ERROR: Conda not found at ${condaDir}" >&2
-      exit 1
-    fi
-
-    # Force-activate the environment and put its bin first in PATH
-    conda activate "${envName}"
-    export PATH="${condaDir}/envs/${envName}/bin:$PATH"
-
-    echo "Conda environment '${envName}' active and ready!"
+    echo "dexhand-bench nix shell ready: run 'uv sync --extra <flashsac|fasttd3|reppo|ppo>'"
   '';
 }

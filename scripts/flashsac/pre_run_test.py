@@ -3,34 +3,12 @@ import sys
 import subprocess
 import shutil
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-FLASHSAC_DIR = os.path.join(PROJECT_ROOT, "FlashSAC")
+from dexhand_bench.config import ROOT
 
-# Auto-locate the dedicated Conda Python executable
-CONDA_CANDIDATES = [
-    sys.executable,
-    os.path.expanduser("~/miniconda3/envs/dexmachina_FlashSAC/bin/python"),
-    os.path.expanduser("~/anaconda3/envs/dexmachina_FlashSAC/bin/python"),
-    os.path.join(os.environ.get("CONDA_PREFIX", ""), "bin", "python"),
-]
-
-PYTHON_EXEC = None
-for candidate in CONDA_CANDIDATES:
-    if os.path.exists(candidate) and "dexmachina_FlashSAC" in candidate:
-        PYTHON_EXEC = candidate
-        break
-
-if PYTHON_EXEC is None:
-    # Fallback to which python if in activated env
-    if "dexmachina_FlashSAC" in os.environ.get("CONDA_DEFAULT_ENV", ""):
-        PYTHON_EXEC = sys.executable
-    else:
-        PYTHON_EXEC = os.path.expanduser("~/miniconda3/envs/dexmachina_FlashSAC/bin/python")
-
-if not os.path.exists(PYTHON_EXEC):
-    print(f"[ERROR] Could not find python binary at {PYTHON_EXEC}. Please activate the conda environment first.")
-    sys.exit(1)
+FLASHSAC_DIR = os.path.join(ROOT, "algorithms", "FlashSAC")
+DEXMACHINA_ASSETS = os.path.join(ROOT, "environments", "dexmachina", "dexmachina", "assets")
+# Run with the FlashSAC environment: uv run --exact --extra flashsac python scripts/flashsac/pre_run_test.py
+PYTHON_EXEC = sys.executable
 
 HANDS = ["allegro_hand", "dex3_hand", "inspire_hand", "xhand"]
 CLIPS = ["box-30-230", "mixer-0-150"]
@@ -46,10 +24,7 @@ for hand in HANDS:
     for clip in CLIPS:
         config_name = f"{hand} | {clip}"
         obj_name = clip.split("-")[0]
-        data_file = os.path.join(
-            PROJECT_ROOT,
-            f"dexmachina/dexmachina/assets/contact_retarget/{hand}/s01/{obj_name}_use_01.npy"
-        )
+        data_file = os.path.join(DEXMACHINA_ASSETS, f"contact_retarget/{hand}/s01/{obj_name}_use_01.npy")
 
         # 1. Check Asset File Existence
         if not os.path.exists(data_file):

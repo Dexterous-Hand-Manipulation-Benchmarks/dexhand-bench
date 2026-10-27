@@ -1,0 +1,13 @@
+# Copy to configs/local.yaml (git-ignored) and adjust.
+# Environment variables still win: WANDB_ENTITY=... WANDB_PROJECT=...
+
+wandb:
+  entity: my-wandb-team
+  project: dexmachina_clean
+
+slurm:
+  partition: gpu_a100
+  account: null
+  jobs:
+    ppo:
+      partition: gpu_h100_short

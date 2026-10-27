@@ -14,23 +14,14 @@ if [ "$1" == "--force" ] || [ "$2" == "--force" ]; then
 fi
 
 # --- 1. Workspace & Path Setup ---
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DHB_EXTRA=flashsac
+source "$(dirname "$0")/../common.sh"
 
-# Activate Conda environment
-eval "$(conda shell.bash hook)"
-if [ "$CONDA_DEFAULT_ENV" != "dexmachina_FlashSAC" ]; then
-    echo "[INFO] Activating Conda environment 'dexmachina_FlashSAC'..."
-    conda activate dexmachina_FlashSAC
-fi
-
-MODELS_DIR="${PROJECT_ROOT}/FlashSAC/models/FlashSAC"
-PYTHON_SCRIPT="${PROJECT_ROOT}/envs/FlashSAC/eval_and_render.py"
-WANDB_PROJECT="dexmachina_clean"
-WANDB_ENTITY="schrapsi-kit"
+MODELS_DIR="${DHB_ROOT}/algorithms/FlashSAC/models/FlashSAC"
+PYTHON_SCRIPT="${DHB_ROOT}/algorithms/FlashSAC/eval_dexmachina.py"
 
 echo "[INFO] Scanning for completed runs in: ${MODELS_DIR}"
-cd "${PROJECT_ROOT}/FlashSAC"
+cd "${DHB_ROOT}/algorithms/FlashSAC"
 
 # --- 2. Iterate Over All Model Folders ---
 for RUN_PATH in "${MODELS_DIR}"/*; do
@@ -99,7 +90,7 @@ for RUN_PATH in "${MODELS_DIR}"/*; do
 import wandb
 try:
     api = wandb.Api()
-    runs = sorted(api.runs('${WANDB_ENTITY}/${WANDB_PROJECT}'), key=lambda r: getattr(r, 'created_at', ''), reverse=True)
+    runs = sorted(api.runs(('${WANDB_ENTITY}' or api.default_entity) + '/${WANDB_PROJECT}'), key=lambda r: getattr(r, 'created_at', ''), reverse=True)
 
     # Priority 1: Match Hand, Clip, Seed AND curriculum=True / 'curriculum' tag
     matched = [
@@ -150,7 +141,6 @@ except Exception as e:
               --checkpoint_path "${STEP_DIR}" \
               ${WANDB_ARG} \
               --project "${WANDB_PROJECT}" \
-              --entity "${WANDB_ENTITY}" \
               --step "${STEP_NUM}" \
               --num_episodes 1 \
               --overrides env=dexmachina \

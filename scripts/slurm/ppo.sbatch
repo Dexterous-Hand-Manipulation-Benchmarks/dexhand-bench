@@ -2,16 +2,14 @@
 #SBATCH --job-name=dexmachina_ppo
 #SBATCH --output=logs/slurm_ppo_%j.out
 #SBATCH --error=logs/slurm_ppo_%j.err
-#SBATCH --time=00:30:00                     # Time limit (30 mins max for dev queues)
-#SBATCH --partition=gpu_h100_short          # Fast development GPU partition (change for production)
-#SBATCH --gres=gpu:1                        # Request 1 GPU (Genesis requires GPU)
-#SBATCH --cpus-per-task=16                  # Recommended CPU count per GPU task
+#SBATCH --gres=gpu:1                        # Genesis requires a GPU
 #SBATCH --ntasks=1
+# Partition, account, time and CPUs come from configs/ via scripts/slurm/submit.sh.
 
 # Queues the original DexMachina PPO (rl_games) implementation.
 # Usage:
-#   sbatch scripts/submit_ppo.sh
-#   HAND=dex3_hand CLIP=mixer-0-150 SEED=1000 sbatch scripts/submit_ppo.sh
+#   scripts/slurm/submit.sh ppo
+#   HAND=dex3_hand CLIP=mixer-0-150 SEED=1000 scripts/slurm/submit.sh ppo
 
 set -e
 
@@ -21,21 +19,18 @@ CLIP="${CLIP:-box-30-230}"
 SEED="${SEED:-0}"
 NUM_ENVS="${NUM_ENVS:-4096}"
 MAX_EPOCHS="${MAX_EPOCHS:-5000}"
-WANDB_PROJECT="${WANDB_PROJECT:-dexmachina}"
 EXP_NAME="${EXP_NAME:-ppo_${HAND}_${CLIP}_seed${SEED}}"
 
-# 1. Initialize environment (adjust path to your conda installation if needed)
-source ~/.bashrc
-conda activate dexmachina
+# 1. Environment: the ppo uv extra (rl_games) and W&B settings from configs/
+cd "${SLURM_SUBMIT_DIR}"   # submit.sh submits from the repository root
+mkdir -p logs
+DHB_EXTRA=ppo
+source scripts/common.sh
 
-# 2. Move to project directory
-cd ~/github/dexmachina_sac/dexmachina
-
-# 3. Create logs directory if it doesn't exist
-mkdir -p ~/github/dexmachina_sac/logs
+# 2. Move to the dexmachina package
+cd "${DHB_ROOT}/environments/dexmachina"
 
 echo "[INFO] Job started on $(hostname) at $(date)"
-echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] hand=${HAND} clip=${CLIP} seed=${SEED} num_envs=${NUM_ENVS}"
 
 # 4. Train

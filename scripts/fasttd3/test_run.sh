@@ -11,15 +11,11 @@
 set -e
 
 # --- Auto-activate Conda Environment ---
-eval "$(conda shell.bash hook)"
-if [ "$CONDA_DEFAULT_ENV" != "dexmachina" ]; then
-    echo "[INFO] Activating Conda environment 'dexmachina'..."
-    conda activate dexmachina
-fi
+DHB_EXTRA=fasttd3
+source "$(dirname "$0")/../common.sh"
 
-cd "$(dirname "$0")/../FastTD3" || exit 1
+cd "${DHB_ROOT}/algorithms/FastTD3" || exit 1
 
-echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
 hand="allegro_hand"
@@ -35,8 +31,7 @@ echo "========================================================"
 python fast_td3/train.py \
     --env_name "dexmachina|${hand}|${clip}" \
     --exp_name "${run_exp_name}" \
-    --project "dexmachina" \
-    --entity "schrapsi-kit" \
+    --project "${WANDB_PROJECT}" \
     --group_name "FastTD3_Test" \
     --seed "${seed}" \
     --num_envs 64 \
@@ -92,7 +87,7 @@ for CKPT in $STEP_CKPTS; do
     ENV_STEP=$(( STEP_NUM * 64 ))
     echo "[INFO] Evaluating checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
 
-    python ../envs/FastTD3/eval_fast_td3.py \
+    python fast_td3/eval_dexmachina.py \
         --checkpoint "$CKPT" \
         --num_envs 20 \
         --env_name "dexmachina|${hand}|${clip}" \
@@ -107,7 +102,7 @@ if [ -f "${LATEST_TS_DIR}/final.pt" ]; then
     TOTAL_ENV_STEPS=$(( 200 * 64 ))
     echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
 
-    python ../envs/FastTD3/eval_fast_td3.py \
+    python fast_td3/eval_dexmachina.py \
         --checkpoint "$FINAL_CKPT" \
         --num_envs 20 \
         --env_name "dexmachina|${hand}|${clip}" \

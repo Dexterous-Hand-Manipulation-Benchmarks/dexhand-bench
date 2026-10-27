@@ -2,16 +2,10 @@
 
 set -e
 
-# --- Auto-activate Conda Environment ---
-eval "$(conda shell.bash hook)"
-if [ "$CONDA_DEFAULT_ENV" != "dexmachina" ]; then
-    echo "[INFO] Activating Conda environment 'dexmachina'..."
-    conda activate dexmachina
-fi
+DHB_EXTRA=reppo
+source "$(dirname "$0")/../common.sh"
+cd "${DHB_ROOT}/algorithms/reppo" || exit 1
 
-cd "$(dirname "$0")/../reppo" || exit 1
-
-echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
 # =====================================================================
@@ -35,8 +29,11 @@ echo "[INFO] Running from directory: $(pwd)"
 # upload), so this dominates the job tail. 0 = all.
 MAX_VIDEOS="${MAX_VIDEOS:-6}"
 
-WANDB_PROJECT="${WANDB_PROJECT:-REPPO}"
-WANDB_ENTITY="${WANDB_ENTITY:-schrapsi-kit}"
+# debug_render.py has its own hardcoded default entity, so always pass one explicitly.
+if [ -z "${WANDB_ENTITY}" ]; then
+    WANDB_ENTITY="$(python -c 'import wandb; print(wandb.Api().default_entity or "")')"
+    export WANDB_ENTITY
+fi
 
 echo "[INFO] WANDB CONFIG"
 echo "WANDB_PROJECT: ${WANDB_PROJECT}"
@@ -53,7 +50,7 @@ for seed in "${seeds[@]}"; do
 
             # Extract the object name to safely check if retarget data exists
             obj_name=$(echo "$clip" | cut -d'-' -f1)
-            data_file="../dexmachina/dexmachina/assets/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
+            data_file="${DEXMACHINA_ASSETS}/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
 
             if [ ! -f "$data_file" ]; then
                 echo "[SKIP] Retarget data not found: ${hand} + ${obj_name}. Moving to next..."
@@ -75,7 +72,7 @@ for seed in "${seeds[@]}"; do
                 ++exp_name="${run_exp_name}" \
                 ++env.name="dexmachina" \
                 ++wandb.project="${WANDB_PROJECT}" \
-                ++wandb.entity="${WANDB_ENTITY}" \
+                ++wandb.entity="${WANDB_ENTITY:-null}" \
                 ++env.retarget_name="para" \
                 ++hyperparameters.total_time_steps=50_000_896 \
                 ++hyperparameters.num_envs=8192 \

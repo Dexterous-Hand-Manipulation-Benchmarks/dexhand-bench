@@ -5,27 +5,14 @@
 
 set -e
 
-# --- Auto-activate Conda Environment ---
-if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/miniconda3/etc/profile.d/conda.sh"
-elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-    source "$HOME/anaconda3/etc/profile.d/conda.sh"
-fi
+DHB_EXTRA=flashsac
+source "$(dirname "$0")/../common.sh"
+cd "${DHB_ROOT}/algorithms/FlashSAC" || exit 1
 
-eval "$(conda shell.bash hook 2>/dev/null || true)"
-if [ "$CONDA_DEFAULT_ENV" != "dexmachina_FlashSAC" ]; then
-    echo "[INFO] Activating Conda environment 'dexmachina_FlashSAC'..."
-    conda activate dexmachina_FlashSAC
-fi
-
-cd "$(dirname "$0")/../FlashSAC" || exit 1
-
-echo "[INFO] Using Python from: $(which python)"
 echo "[INFO] Running from directory: $(pwd)"
 
 # --- 1. WandB & Hydra Paths ---
-PROJECT_NAME="dexmachina_clean"
-ENTITY_NAME="schrapsi-kit"
+PROJECT_NAME="${WANDB_PROJECT}"
 GROUP_NAME="FlashSAC"
 CONFIG_PATH="configs"
 CONFIG_NAME="flashSAC_base"
@@ -114,7 +101,7 @@ for run_item in "${RUN_QUEUE[@]}"; do
     run_exp_name="${hand}_${clip}_seed${seed}_10M_official"
 
     obj_name=$(echo "$clip" | cut -d'-' -f1)
-    data_file="../dexmachina/dexmachina/assets/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
+    data_file="${DEXMACHINA_ASSETS}/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
 
     if [ ! -f "$data_file" ]; then
         echo "[SKIP] Retarget data not found: ${hand} + ${obj_name}. Moving to next..."
@@ -162,7 +149,6 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 `#=== Logging (WandB) ===#` \
                 --overrides "logger_type=wandb" \
                 --overrides "project_name=${PROJECT_NAME}" \
-                --overrides "entity_name=${ENTITY_NAME}" \
                 --overrides "group_name=${GROUP_NAME}" \
                 --overrides "exp_name=${run_exp_name}" \
                 `#=== Architecture & Environment Overrides ===#` \
@@ -233,13 +219,12 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 CHECKPOINT_COUNTER=$((CHECKPOINT_COUNTER + 1))
                 STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
 
-                python ../envs/FlashSAC/eval_and_render.py \
+                python eval_dexmachina.py \
                     --config_path "${CONFIG_PATH}" \
                     --config_name "${CONFIG_NAME}" \
                     --checkpoint_path "${STEP_DIR}" \
                     ${WANDB_ARG} \
                     --project "${PROJECT_NAME}" \
-                    --entity "${ENTITY_NAME}" \
                     --step "${STEP_NUM}" \
                     --num_episodes 1 \
                     "${SHARED_ENV_OVERRIDES[@]}" \

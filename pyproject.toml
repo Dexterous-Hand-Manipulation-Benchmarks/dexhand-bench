@@ -1,0 +1,108 @@
+[project]
+name = "dexhand-bench"
+version = "0.1.0"
+description = "Benchmarking RL methods on dexterous bimanual hand manipulation (DexMachina)."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    # Simulator and task suite (git submodules, installed editable).
+    "genesis-world",
+    "dexmachina",
+    # Versions the seminar runs were produced with.
+    "numpy==1.26.4",
+    "taichi==1.7.3",
+    "libigl==2.5.1",
+    "trimesh==5.0.0",
+    # dexmachina does not declare its dependencies.
+    "omegaconf",
+    "pyyaml",
+    "scipy",
+    # scipy 1.15's macOS wheels fail to load on macOS 27 (dyld rejects the
+    # __thread_bss section of _spropack); 1.14 works.
+    "scipy<1.15 ; sys_platform == 'darwin'",
+    "opencv-python",
+    "seaborn",
+    "wandb",
+]
+
+[project.optional-dependencies]
+# One extra per method. They pin incompatible versions (gymnasium, torch,
+# wandb, jax), so only one can be installed at a time; see [tool.uv].conflicts.
+flashsac = [
+    "flashrl",
+    "torch==2.5.1",
+]
+fasttd3 = [
+    "fast-td3",
+    "torch==2.6.0",
+    "torchrl==0.7.2",
+    "tensordict==0.7.2",
+    "gymnasium<1.0.0",
+    "jax-jumpy==1.0.0",
+    "tyro",
+    "loguru",
+    "matplotlib",
+    "moviepy",
+    "pandas",
+    "protobuf",
+    "pygame",
+    "stable-baselines3",
+    "tqdm",
+]
+reppo = [
+    "reppo",
+]
+# dexmachina's own rl_games PPO baseline.
+ppo = [
+    "rl-games",
+    "torch==2.5.1",
+]
+
+[project.scripts]
+dexhand-bench = "dexhand_bench.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dexhand_bench"]
+
+[tool.hatch.build.targets.wheel.force-include]
+# Compatibility shim for code that still does `from wandb_logger import ...`.
+"src/wandb_logger.py" = "wandb_logger.py"
+
+[tool.uv]
+environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
+# Genesis 0.2.1 pins mujoco==3.2.5, but only uses it to parse MJCF files,
+# which DexMachina never loads (hands and objects are URDF/mesh). REPPO's
+# mujoco_playground needs a newer mujoco.
+override-dependencies = ["mujoco>=3.2.5"]
+conflicts = [
+    [
+        { extra = "flashsac" },
+        { extra = "fasttd3" },
+        { extra = "reppo" },
+        { extra = "ppo" },
+    ],
+]
+
+[tool.uv.sources]
+genesis-world = { path = "environments/Genesis", editable = true }
+dexmachina = { path = "environments/dexmachina", editable = true }
+flashrl = { path = "algorithms/FlashSAC", editable = true }
+fast-td3 = { path = "algorithms/FastTD3", editable = true }
+reppo = { path = "algorithms/reppo", editable = true }
+rl-games = { git = "https://github.com/MandiZhao/rl_games", rev = "2c1a7718a3eed71e7c230b6bb8fb2897b0b1d0c4" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "sim: runs the Genesis simulator (slower, compiles kernels on first run)",
+]

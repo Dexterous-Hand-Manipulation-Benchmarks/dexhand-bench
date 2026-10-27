@@ -1,3 +1,15 @@
-[submodule "reppo"]
-	path = reppo
-	url = git@github.com:blin-1095/reppo.git
+[submodule "algorithms/reppo"]
+	path = algorithms/reppo
+	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/reppo.git
+[submodule "algorithms/FlashSAC"]
+	path = algorithms/FlashSAC
+	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/FlashSAC.git
+[submodule "algorithms/FastTD3"]
+	path = algorithms/FastTD3
+	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/FastTD3.git
+[submodule "environments/dexmachina"]
+	path = environments/dexmachina
+	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexmachina.git
+[submodule "environments/Genesis"]
+	path = environments/Genesis
+	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/Genesis.git

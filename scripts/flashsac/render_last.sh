@@ -1,14 +1,12 @@
 #!/bin/bash
 set -e
 
-# 1. Activate the correct Conda environment
-eval "$(conda shell.bash hook)"
-if [ "$CONDA_DEFAULT_ENV" != "dexmachina_FlashSAC" ]; then
-    conda activate dexmachina_FlashSAC
-fi
+# 1. Use the FlashSAC uv environment
+DHB_EXTRA=flashsac
+source "$(dirname "$0")/../common.sh"
 
 # 2. Navigate to the FlashSAC directory
-cd "$(dirname "$0")/../FlashSAC" || exit 1
+cd "${DHB_ROOT}/algorithms/FlashSAC" || exit 1
 echo "[INFO] Working directory is now: $(pwd)"
 
 # 3. Target the correct run path
@@ -25,7 +23,7 @@ echo "[INFO] Rendering checkpoints from: $LATEST_RUN_DIR"
 for STEP_DIR in $(find "$LATEST_RUN_DIR" -maxdepth 1 -type d -name "step*" | sort -V); do
     STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
     echo "Rendering $STEP_DIR..."
-    python ../envs/FlashSAC/eval_and_render.py \
+    python eval_dexmachina.py \
         --config_path "configs" \
         --checkpoint_path "${STEP_DIR}" \
         --step "${STEP_NUM}" \
