@@ -1,0 +1,7 @@
+{
+  "num_envs": 2,
+  "steps": 205,
+  "seed": 0,
+  "action_scale": 0.3,
+  "env_name": "dexmachina|allegro_hand|box-30-230"
+}
