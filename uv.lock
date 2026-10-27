@@ -729,7 +729,11 @@ flashsac = [
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 ppo = [
+    { name = "gymnasium", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "protobuf", version = "3.20.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "ray", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "rl-games", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "setuptools", version = "78.1.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
 reppo = [
@@ -748,6 +752,7 @@ requires-dist = [
     { name = "flashrl", marker = "extra == 'flashsac'", editable = "algorithms/FlashSAC" },
     { name = "genesis-world", editable = "environments/Genesis" },
     { name = "gymnasium", marker = "extra == 'fasttd3'", specifier = "<1.0.0" },
+    { name = "gymnasium", marker = "extra == 'ppo'", specifier = "==1.1.1" },
     { name = "jax-jumpy", marker = "extra == 'fasttd3'", specifier = "==1.0.0" },
     { name = "libigl", specifier = "==2.5.1" },
     { name = "loguru", marker = "extra == 'fasttd3'" },
@@ -758,13 +763,16 @@ requires-dist = [
     { name = "opencv-python" },
     { name = "pandas", marker = "extra == 'fasttd3'" },
     { name = "protobuf", marker = "extra == 'fasttd3'" },
+    { name = "protobuf", marker = "extra == 'ppo'", specifier = "==3.20.3" },
     { name = "pygame", marker = "extra == 'fasttd3'" },
     { name = "pyyaml" },
+    { name = "ray", marker = "extra == 'ppo'", specifier = "==2.47.0" },
     { name = "reppo", marker = "extra == 'reppo'", editable = "algorithms/reppo" },
     { name = "rl-games", marker = "extra == 'ppo'", git = "https://github.com/MandiZhao/rl_games?rev=2c1a7718a3eed71e7c230b6bb8fb2897b0b1d0c4" },
     { name = "scipy" },
     { name = "scipy", marker = "sys_platform == 'darwin'", specifier = "<1.15" },
     { name = "seaborn" },
+    { name = "setuptools", marker = "extra == 'ppo'", specifier = "==78.1.1" },
     { name = "stable-baselines3", marker = "extra == 'fasttd3'" },
     { name = "taichi", specifier = "==1.7.3" },
     { name = "tensordict", marker = "extra == 'fasttd3'", specifier = "==0.7.2" },
@@ -1477,6 +1485,26 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0d/f8/5699ddb3e1c4f6d97b8930e573074849b921da8374fccd141f0f3a9bd713/gymnasium-0.29.1.tar.gz", hash = "sha256:1a532752efcb7590478b1cc7aa04f608eb7a2fdad5570cd217b66b6a35274bb1", size = 820485, upload-time = "2023-08-21T13:07:32.024Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a8/4d/3cbfd81ed84db450dbe73a89afcd8bc405273918415649ac6683356afe92/gymnasium-0.29.1-py3-none-any.whl", hash = "sha256:61c3384b5575985bb7f85e43213bcb40f36fcdff388cae6bc229304c71f2843e", size = 953939, upload-time = "2023-08-21T13:07:29.934Z" },
+]
+
+[[package]]
+name = "gymnasium"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "sys_platform == 'darwin'",
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "platform_machine != 'aarch64' and sys_platform == 'linux'",
+]
+dependencies = [
+    { name = "cloudpickle", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "farama-notifications", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "numpy", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "typing-extensions", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/69/70cd29e9fc4953d013b15981ee71d4c9ef4d8b2183e6ef2fe89756746dce/gymnasium-1.1.1.tar.gz", hash = "sha256:8bd9ea9bdef32c950a444ff36afc785e1d81051ec32d30435058953c20d2456d", size = 829326, upload-time = "2025-03-06T16:30:36.428Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/68/2bdc7b46b5f543dd865575f9d19716866bdb76e50dd33b71ed1a3dd8bb42/gymnasium-1.1.1-py3-none-any.whl", hash = "sha256:9c167ec0a2b388666e37f63b2849cd2552f7f5b71938574c637bb36487eb928a", size = 965410, upload-time = "2025-03-06T16:30:34.443Z" },
 ]
 
 [[package]]
@@ -4372,6 +4400,27 @@ wheels = [
 ]
 
 [[package]]
+name = "ray"
+version = "2.47.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "filelock", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "jsonschema", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "msgpack", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "protobuf", version = "3.20.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pyyaml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/3d/1bf8b0d0af6df701665f2bee1bc74413038b0318250aee9c6bdb874cfa72/ray-2.47.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:1b63833d97099777f672a87f1f434468fad3b4b4c72110258cd1779e4eeeba7e", size = 66155252, upload-time = "2025-06-11T19:35:47.619Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/5f/78593fc5b0b82cdcf1661952d6bccc1ebf8393e53b78f8026a76509866d3/ray-2.47.0-cp310-cp310-macosx_12_0_x86_64.whl", hash = "sha256:0855ef568da969bd9708b09529884f6fb1d9625c934a314c450f0c5e242a913e", size = 68573665, upload-time = "2025-06-11T19:35:55.976Z" },
+    { url = "https://files.pythonhosted.org/packages/da/b2/e1710b6b2bd833a5995c302a72eab9c374e1e61f867c575a17b40ef3cd0b/ray-2.47.0-cp310-cp310-manylinux2014_aarch64.whl", hash = "sha256:80d05b737a5882040dc949d9ab374e42e1f5307a2d2af22f5a86a913302c619c", size = 67818721, upload-time = "2025-06-11T19:36:02.935Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/c7/baae065524e0c678ba2576dbba48fdeed1650fd4e1cc8fa095c45dc2cd76/ray-2.47.0-cp310-cp310-manylinux2014_x86_64.whl", hash = "sha256:d9bc0b2b9a97479741b05a0ee40ca78170f1a312029f0cb3ec639ca2975a2c14", size = 68777616, upload-time = "2025-06-11T19:36:09.274Z" },
+]
+
+[[package]]
 name = "referencing"
 version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4776,6 +4825,20 @@ wheels = [
 
 [[package]]
 name = "setuptools"
+version = "78.1.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "sys_platform == 'darwin'",
+    "platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "platform_machine != 'aarch64' and sys_platform == 'linux'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/9c/42314ee079a3e9c24b27515f9fbc7a3c1d29992c33451779011c74488375/setuptools-78.1.1.tar.gz", hash = "sha256:fcc17fd9cd898242f6b4adfaca46137a9edef687f43e6f78469692a5e70d851d", size = 1368163, upload-time = "2025-04-19T18:23:36.68Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/99/158ad0609729111163fc1f674a5a42f2605371a4cf036d0441070e2f7455/setuptools-78.1.1-py3-none-any.whl", hash = "sha256:c3a9c4211ff4c309edb8b8c4f1cbfa7ae324c4ba9f91ff254e3d305b9fd54561", size = 1256462, upload-time = "2025-04-19T18:23:34.525Z" },
+]
+
+[[package]]
+name = "setuptools"
 version = "84.2.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
@@ -5021,7 +5084,7 @@ dependencies = [
     { name = "pillow", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "protobuf", version = "3.20.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "setuptools", version = "65.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-flashsac') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo')" },
-    { name = "setuptools", version = "84.2.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
+    { name = "setuptools", version = "78.1.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
     { name = "tensorboard-data-server", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "werkzeug", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
@@ -5601,7 +5664,7 @@ dependencies = [
     { name = "requests", marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
     { name = "sentry-sdk", marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
     { name = "setproctitle", marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
-    { name = "setuptools", version = "84.2.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
+    { name = "setuptools", version = "78.1.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
     { name = "shortuuid", marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
     { name = "six", marker = "(sys_platform == 'darwin' and extra == 'extra-13-dexhand-bench-ppo') or (sys_platform == 'linux' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-ppo' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-flashsac') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-fasttd3' and extra == 'extra-13-dexhand-bench-reppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-ppo') or (extra == 'extra-13-dexhand-bench-flashsac' and extra == 'extra-13-dexhand-bench-reppo')" },
 ]

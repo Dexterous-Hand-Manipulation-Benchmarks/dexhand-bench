@@ -57,6 +57,12 @@ reppo = [
 ppo = [
     "rl-games",
     "torch==2.5.1",
+    # Pins from dexmachina's dexmachina.yaml: its rl_games wrapper needs gym and
+    # gymnasium, rl_games imports ray, and wandb 0.12 needs pkg_resources (setuptools<81).
+    "gymnasium==1.1.1",
+    "ray==2.47.0",
+    "protobuf==3.20.3",
+    "setuptools==78.1.1",
 ]
 
 [project.scripts]
