@@ -110,5 +110,5 @@ rl-games = { git = "https://github.com/MandiZhao/rl_games", rev = "2c1a7718a3eed
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "sim: runs the Genesis simulator (slower, compiles kernels on first run)",
+    "sim: needs Genesis and DexMachina (slower: imports and loads assets; rollouts compile kernels on first run)",
 ]
