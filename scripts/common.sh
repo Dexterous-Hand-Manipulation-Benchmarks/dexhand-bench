@@ -5,6 +5,10 @@
 DHB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEXMACHINA_ASSETS="${DHB_ROOT}/environments/dexmachina/dexmachina/assets"
 
+# One environment per method: a shared .venv would be re-synced under a running job of another method.
+: "${UV_PROJECT_ENVIRONMENT:=${DHB_ROOT}/.venv-${DHB_EXTRA}}"
+export UV_PROJECT_ENVIRONMENT
+
 # Every `python` call runs in the method's locked uv environment, from any directory.
 python() {
     uv run --project "${DHB_ROOT}" --exact --extra "${DHB_EXTRA}" python "$@"

@@ -43,6 +43,13 @@ uv run --exact --extra fasttd3 python algorithms/FastTD3/fast_td3/train.py --hel
 When running from inside a submodule, add `--project <repo root>`; otherwise uv
 picks up the submodule's own `pyproject.toml`. The scripts below do this for you.
 
+The scripts keep one environment per method (`.venv-<extra>`, via
+`UV_PROJECT_ENVIRONMENT`), so jobs of different methods can run at the same time
+from one checkout. Each method is installed once there (a few GB each); set
+`UV_PROJECT_ENVIRONMENT` yourself to put it elsewhere. Don't switch the plain
+`.venv` to another extra while a job uses it.
+
+
 On NixOS, `nix-shell` (or `direnv allow`) provides the system libraries; uv
 still manages Python.
 
