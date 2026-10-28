@@ -49,7 +49,6 @@ from one checkout. Each method is installed once there (a few GB each); set
 `UV_PROJECT_ENVIRONMENT` yourself to put it elsewhere. Don't switch the plain
 `.venv` to another extra while a job uses it.
 
-
 On NixOS, `nix-shell` (or `direnv allow`) provides the system libraries; uv
 still manages Python.
 
@@ -143,11 +142,10 @@ Adding a new method or environment: fork it into the organization, add it with
 These were found while restructuring and are intentionally **not** changed yet,
 because fixing them changes results:
 
-- **FastTD3 bootstraps time-outs from the wrong observation.** dexmachina never
-  sets `extras["final_obs"]`, so on time-outs the FastTD3 wrapper stores the first
-  observation of the next episode as `next_obs`, and FastTD3 bootstraps from it.
-  FlashSAC's wrapper captures the real terminal observation in `reset_idx`.
-  Documented by an `xfail` test in `tests/test_fasttd3_wrapper.py`.
+- **Time-out bootstrapping differs between methods.** The provided FastTD3 scripts
+  disable bootstrapping, so its handling of the terminal observation is latent there.
+  FlashSAC treats every episode end on DexMachina as terminal (see below),
+  so its `bootstrap_on_timeout` option has no effect.
 - **The methods train on different environment configurations.** FlashSAC builds
   the env from dexmachina's argparser defaults, FastTD3 from its own
   `DexMachinaArgs`. They differ in, for example, action mode (residual vs hybrid),
@@ -155,8 +153,9 @@ because fixing them changes results:
   gains and the whole curriculum schedule. Only the reward weights are aligned.
 - **FlashSAC maps clips by substring.** Any clip containing "box" becomes
   `box-30-230-s01-01` and any "mixer" clip becomes `mixer-0-150-s01-01`.
-- **dexmachina reports diverged (NaN) envs as time-outs**, so they are bootstrapped
-  like regular truncations.
+- **dexmachina flags every reset as both terminated and timed out**: time-outs,
+  early resets and diverged (NaN) envs alike. The methods interpret these flags
+  differently, so episode ends are terminal for some methods and bootstrapped for others.
 - **REPPO's `debug_render.py` defaults to the old W&B team**, so
   `scripts/reppo/run_and_eval.sh` always passes an entity explicitly.
 
