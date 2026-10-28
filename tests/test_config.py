@@ -35,3 +35,12 @@ def test_cli_env_prints_exports(capsys, monkeypatch):
     monkeypatch.setenv("WANDB_ENTITY", "team x")
     main(["env"])
     assert "export WANDB_ENTITY='team x'" in capsys.readouterr().out
+
+
+def test_cli_env_unsets_empty_entity(capsys, monkeypatch, tmp_path):
+    local = tmp_path / "local.yaml"
+    local.write_text("wandb:\n  entity: null\n")
+    monkeypatch.setenv("DHB_CONFIG", str(local))
+    monkeypatch.delenv("WANDB_ENTITY", raising=False)
+    main(["env"])
+    assert "unset WANDB_ENTITY" in capsys.readouterr().out
