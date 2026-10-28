@@ -1,6 +1,7 @@
 [submodule "algorithms/reppo"]
 	path = algorithms/reppo
 	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/reppo.git
+	branch = auc_add_reppo
 [submodule "algorithms/FlashSAC"]
 	path = algorithms/FlashSAC
 	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/FlashSAC.git
