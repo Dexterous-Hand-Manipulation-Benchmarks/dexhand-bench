@@ -18,3 +18,19 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked --exact --extra ${{ matrix.extra }}
       - run: uv run --exact --extra ${{ matrix.extra }} pytest -m "not sim" -v
+
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true   # until the Phase C cleanup is done
+    steps:
+      - uses: actions/checkout@v4
+      - run: git submodule update --init algorithms/FlashSAC
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --locked --only-dev ruff check
+      # FlashSAC files that are entirely ours get the umbrella rules; the rest of the fork keeps its upstream config.
+      - run: >-
+          uv run --locked --only-dev ruff check --config pyproject.toml
+          algorithms/FlashSAC/eval_dexmachina.py
+          algorithms/FlashSAC/check_curriculum.py
+          algorithms/FlashSAC/flash_rl/envs/dexmachina.py
+      - run: uv run --locked --only-dev ruff check --extend-exclude play_isaaclab.py algorithms/FlashSAC
