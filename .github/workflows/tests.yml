@@ -26,11 +26,14 @@ jobs:
       - uses: actions/checkout@v7
       - run: git submodule update --init algorithms/FlashSAC
       - uses: astral-sh/setup-uv@v10.3.3
-      - run: uv run --locked --only-dev ruff check
+      # --frozen: --locked would read every path dependency's metadata, and only FlashSAC is checked out here.
+      - run: uv run --frozen --only-dev ruff check
       # FlashSAC files that are entirely ours get the umbrella rules; the rest of the fork keeps its upstream config.
-      - run: >-
-          uv run --locked --only-dev ruff check --config pyproject.toml
+      - if: ${{ !cancelled() }}
+        run: >-
+          uv run --frozen --only-dev ruff check --config pyproject.toml
           algorithms/FlashSAC/eval_dexmachina.py
           algorithms/FlashSAC/check_curriculum.py
           algorithms/FlashSAC/flash_rl/envs/dexmachina.py
-      - run: uv run --locked --only-dev ruff check --extend-exclude play_isaaclab.py algorithms/FlashSAC
+      - if: ${{ !cancelled() }}
+        run: uv run --frozen --only-dev ruff check --extend-exclude play_isaaclab.py algorithms/FlashSAC
