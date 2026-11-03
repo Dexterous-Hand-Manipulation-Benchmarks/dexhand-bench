@@ -1,7 +1,6 @@
 import os
-import sys
 import subprocess
-import shutil
+import sys
 
 from dexhand_bench.config import ROOT
 

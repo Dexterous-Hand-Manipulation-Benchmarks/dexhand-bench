@@ -119,7 +119,7 @@ line-length = 120
 target-version = "py310"
 # The forks lint with their own config; CI checks our FlashSAC files with this one.
 extend-exclude = ["algorithms", "environments"]
-src = ["src", "algorithms/FlashSAC"]
+src = ["src", "tests", "algorithms/FlashSAC"]
 
 [tool.ruff.lint]
 # FlashSAC's rule set plus the cleanup rules: blind excepts, try-except-pass, magic values,

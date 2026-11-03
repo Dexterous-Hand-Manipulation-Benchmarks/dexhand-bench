@@ -1,13 +1,13 @@
-import os
 import time
-import wandb
-import wandb.sdk.wandb_run
+from typing import Any, Optional
+
 import numpy as np
 import torch
-from typing import Dict, Any, Optional
+import wandb
+import wandb.sdk.wandb_run
 
 # --- Universal Metric Mapping ---
-METRIC_MAPPING: Dict[str, str] = {
+METRIC_MAPPING: dict[str, str] = {
     # 3D Mesh Tracking & Evaluation
     "auc_add": "eval/auc_add",
     "AUC_ADD": "eval/auc_add",
@@ -213,7 +213,7 @@ class UniversalLogger:
     keep_model_specific: bool = True
     start_time: float = time.time()
     last_env_step: int = 0
-    algo_specific_map: Dict[str, str] = {}
+    algo_specific_map: dict[str, str] = {}
 
     @classmethod
     def install(
@@ -255,7 +255,7 @@ class UniversalLogger:
             cls._installed = True
 
     @classmethod
-    def standardize_config(cls, raw_cfg: Any) -> Dict[str, Any]:
+    def standardize_config(cls, raw_cfg: Any) -> dict[str, Any]:
         cfg = _to_clean_dict(raw_cfg)
 
         raw_algo = (
@@ -353,7 +353,7 @@ class UniversalLogger:
         return val
 
     @classmethod
-    def _calculate_env_step(cls, raw_data: Dict[str, Any], explicit_step: Optional[int]) -> int:
+    def _calculate_env_step(cls, raw_data: dict[str, Any], explicit_step: Optional[int]) -> int:
         if "global/env_step" in raw_data and raw_data["global/env_step"] is not None:
             return int(raw_data["global/env_step"])
         if "env_step" in raw_data and raw_data["env_step"] is not None:
@@ -375,7 +375,7 @@ class UniversalLogger:
         return cls.last_env_step
 
     @classmethod
-    def build_sanitized_payload(cls, data: Dict[str, Any], explicit_step: Optional[int]) -> Dict[str, Any]:
+    def build_sanitized_payload(cls, data: dict[str, Any], explicit_step: Optional[int]) -> dict[str, Any]:
         env_step = cls._calculate_env_step(data, explicit_step)
         cls.last_env_step = max(cls.last_env_step, env_step)
 
@@ -397,11 +397,11 @@ class UniversalLogger:
             val = cls._clean_val(raw_val)
             if val is None:
                 continue
-                
+
             # 1. Global mapping (Highest Priority)
             if key in METRIC_MAPPING:
                 sanitized_payload[METRIC_MAPPING[key]] = val
-                
+
             # 2. Algorithm-Specific overrides (Second Priority)
             elif cls.keep_model_specific and key in cls.algo_specific_map:
                 sanitized_payload[cls.algo_specific_map[key]] = val
@@ -463,11 +463,11 @@ def _interceptor_wandb_init(*args, **kwargs):
     return run
 
 
-def _interceptor_run_log(self, data: Dict[str, Any], *args, **kwargs):
+def _interceptor_run_log(self, data: dict[str, Any], *args, **kwargs):
     """Intercepts Run.log() across all frameworks."""
     if not isinstance(data, dict):
         return _ORIG_RUN_LOG(self, data, *args, **kwargs)
-    explicit_step = kwargs.get("step", None)
+    explicit_step = kwargs.get("step")
     payload = UniversalLogger.build_sanitized_payload(data, explicit_step)
     env_step = payload.get("global/env_step", explicit_step)
 

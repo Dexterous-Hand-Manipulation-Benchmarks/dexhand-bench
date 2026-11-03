@@ -1,7 +1,7 @@
 import sys
 
-import wandb
 import pandas as pd
+import wandb
 
 from dexhand_bench.config import load_config, wandb_settings
 
@@ -54,7 +54,7 @@ def debug_get_wandb_run():
         scan_iter = run.scan_history()
         first_row = next(iter(scan_iter), None)
         if first_row is not None:
-            print(f"scan_history() retrieved records successfully.")
+            print("scan_history() retrieved records successfully.")
             print(f"Sample keys in scan_history row: {list(first_row.keys())}")
         else:
             print("[!] scan_history() produced 0 records.")
@@ -64,7 +64,9 @@ def debug_get_wandb_run():
 def test_extract_single_run():
     # Test 1: Direct wandb-history.jsonl file download
     print("\n--- TEST 1: Direct File Download ('wandb-history.jsonl') ---")
-    import tempfile, json, gzip
+    import gzip
+    import json
+    import tempfile
     file_records = []
     try:
         target_f = None

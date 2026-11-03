@@ -13,9 +13,8 @@ Features:
 import argparse
 import gzip
 import json
-import os
-import sys
 import tempfile
+
 import pandas as pd
 import wandb
 
@@ -148,7 +147,7 @@ def extract_run_history(run, max_samples: int = 100000) -> list[dict]:
         print(f"    [WARN] Strategy 2 (run.history) failed: {e}")
 
     # Strategy 3: scan_history() with adaptive page size
-    print(f"    [STRATEGY 3] Attempting scan_history with adaptive paging...")
+    print("    [STRATEGY 3] Attempting scan_history with adaptive paging...")
     try:
         last_step = getattr(run, "lastHistoryStep", 0) or 0
         adaptive_page = max(50000, last_step // 20) if last_step > 0 else 50000
