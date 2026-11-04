@@ -22,6 +22,7 @@ class FakeDexEnv:
         self.rew_dict = {}
         self.received_actions = None
         self.dist = {"pos_dist": 0.01, "rot_dist": 0.1, "arti_dist": 0.05}
+        self.success = {key: torch.ones(num_envs, dtype=torch.bool) for key in ("success_2cm", "success_5cm")}
 
     def get_observations(self):
         offsets = 100.0 * torch.arange(self.num_envs, dtype=torch.float32)
@@ -39,6 +40,7 @@ class FakeDexEnv:
         self.t += 1
         timeout = self.t >= self.max_episode_length
         self.rew_dict = {k: torch.full((self.num_envs,), v) for k, v in self.dist.items()}
+        self.rew_dict.update({k: v.clone() for k, v in self.success.items()})
         reset_ids = timeout.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_ids) > 0:
             self.reset_idx(reset_ids)

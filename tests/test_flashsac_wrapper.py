@@ -43,21 +43,11 @@ def test_nan_observations_are_zeroed():
     assert torch.equal(obs, torch.zeros(2, 3))
 
 
-@pytest.mark.parametrize(
-    "pos, rot, arti, expected_2cm, expected_5cm",
-    [
-        (0.01, 0.10, 0.05, 1.0, 1.0),
-        (0.03, 0.10, 0.05, 0.0, 1.0),
-        (0.01, 0.30, 0.05, 0.0, 1.0),
-        (0.01, 0.10, 0.12, 0.0, 1.0),
-        (0.06, 0.10, 0.05, 0.0, 0.0),
-    ],
-)
-def test_success_metrics(pos, rot, arti, expected_2cm, expected_5cm):
+def test_success_metrics_are_the_env_success_rates():
     raw, env = make()
-    raw.dist = {"pos_dist": pos, "rot_dist": rot, "arti_dist": arti}
+    raw.success = {"success_2cm": torch.tensor([True, False]), "success_5cm": torch.tensor([True, True])}
     env.reset()
     *_, infos = env.step(torch.zeros(2, 2))
-    assert infos["eval/success_2cm"] == expected_2cm
-    assert infos["eval/success_5cm"] == expected_5cm
-    assert math.isclose(infos["env/pos_dist"], pos, rel_tol=1e-6)
+    assert infos["eval/success_2cm"] == 0.5
+    assert infos["eval/success_5cm"] == 1.0
+    assert math.isclose(infos["env/pos_dist"], raw.dist["pos_dist"], rel_tol=1e-6)
