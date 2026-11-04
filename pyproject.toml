@@ -72,6 +72,7 @@ dexhand-bench = "dexhand_bench.cli:main"
 dev = [
     "pytest>=8",
     "ruff==0.14.0",
+    "basedpyright==1.31.6",
 ]
 
 [build-system]
@@ -129,3 +130,23 @@ select = ["E4", "E5", "E7", "E9", "F", "UP006", "I", "W", "BLE001", "S110", "PLR
 [tool.ruff.lint.per-file-ignores]
 # Tests import genesis, dexmachina and the method packages inside functions: each is installed only with some extras.
 "tests/**" = ["PLR2004", "PLC0415"]
+
+[tool.basedpyright]
+pythonVersion = "3.10"
+# Our code only: the umbrella package, the tests and the FlashSAC files that are entirely ours.
+include = [
+    "src",
+    "tests",
+    "algorithms/FlashSAC/eval_dexmachina.py",
+    "algorithms/FlashSAC/check_curriculum.py",
+    "algorithms/FlashSAC/flash_rl/envs/dexmachina.py",
+]
+strict = [
+    "src",
+    "algorithms/FlashSAC/eval_dexmachina.py",
+    "algorithms/FlashSAC/check_curriculum.py",
+    "algorithms/FlashSAC/flash_rl/envs/dexmachina.py",
+]
+typeCheckingMode = "standard"
+# The path dependencies are editable installs, which the checker cannot follow.
+extraPaths = ["src", "tests", "algorithms/FlashSAC", "algorithms/FastTD3", "environments/dexmachina", "environments/Genesis"]
