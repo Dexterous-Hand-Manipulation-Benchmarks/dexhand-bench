@@ -51,3 +51,17 @@ def test_success_metrics_are_the_env_success_rates():
     assert infos["eval/success_2cm"] == 0.5
     assert infos["eval/success_5cm"] == 1.0
     assert math.isclose(infos["env/pos_dist"], raw.dist["pos_dist"], rel_tol=1e-6)
+
+
+def test_tracking_errors_report_every_metric_dexmachina_provides():
+    distances = ("pos_dist", "rot_dist", "arti_dist", "keypoint_dist")
+    rew_dict = {key: torch.tensor([0.0, 1.0]) for key in distances}
+    rew_dict.update({key: torch.tensor([True, False]) for key in ("success_2cm", "success_5cm")})
+    means = flash_dex.TrackingErrors.from_rew_dict(rew_dict).log_means()
+    expected_names = {"eval/success_2cm", "eval/success_5cm"} | {f"env/{key}" for key in distances}
+    assert means == {name: 0.5 for name in expected_names}
+
+
+def test_tracking_errors_leave_out_metrics_dexmachina_does_not_provide():
+    means = flash_dex.TrackingErrors.from_rew_dict({"pos_dist": torch.tensor([0.25, 0.75])}).log_means()
+    assert means == {"env/pos_dist": 0.5}
