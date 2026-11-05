@@ -18,14 +18,14 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
       - run: uv sync --locked --exact --extra ${{ matrix.extra }}
       - run: uv run --exact --extra ${{ matrix.extra }} pytest -m "not sim" -v
-      # Type check our code; it needs the full flashsac install. Non-blocking until the Phase C cleanup is done.
+      # Type check our code; it needs the full flashsac install. Non-blocking until the cleanup is done.
       - if: matrix.extra == 'flashsac'
         continue-on-error: true
         run: uv run --exact --extra flashsac basedpyright
 
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true   # until the Phase C cleanup is done
+    continue-on-error: true   # until the cleanup is done
     steps:
       - uses: actions/checkout@v7
       - run: git submodule update --init algorithms/FlashSAC
