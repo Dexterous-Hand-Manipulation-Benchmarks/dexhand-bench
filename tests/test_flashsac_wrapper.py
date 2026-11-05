@@ -1,4 +1,5 @@
 """Unit tests for FlashSAC's DexMachina wrapper against a fake env (no simulator)."""
+import dataclasses
 import math
 
 import pytest
@@ -78,3 +79,23 @@ def test_curriculum_clock_visits_every_epoch_once_in_order():
     # The reported run size divides evenly, so the last step lands on max_epochs itself.
     assert list(dict.fromkeys(epochs)) == list(range(max_epochs + 1))
 
+
+def test_env_config_keeps_the_factory_defaults_for_absent_keys():
+    config = flash_dex.DexmachinaEnvConfig.from_hydra({"max_epochs": 10, "curriculum": False}, "dexmachina/box")
+    assert config.clip == "dexmachina/box"
+    assert config.hand is None
+    assert config.reward_overrides is None
+    assert config.actuate_object is False
+    assert config.retarget_name == flash_dex.DEFAULT_RETARGET_NAME
+
+
+def test_env_config_field_cannot_be_reassigned():
+    config = flash_dex.DexmachinaEnvConfig.from_hydra({"max_epochs": 10}, "")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        config.max_epochs = 20
+
+
+def test_env_config_reward_overrides_cannot_be_written():
+    config = flash_dex.DexmachinaEnvConfig.from_hydra({"max_epochs": 10, "reward_cfg": {"bc_beta": 1.0}}, "")
+    with pytest.raises(TypeError):
+        config.reward_overrides["bc_beta"] = 2.0
