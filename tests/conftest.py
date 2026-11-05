@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
+FLASHSAC_ENV_CONFIG = Path(__file__).parents[1] / "algorithms/FlashSAC/configs/env/dexmachina.yaml"
 
 # Golden rollouts are recorded on CPU and are bit-identical between runs on the
 # same machine. The tolerance only absorbs float differences between platforms.
@@ -16,6 +17,14 @@ def load_golden(name):
     data = np.load(GOLDEN_DIR / f"{name}.npz")
     meta = json.loads((GOLDEN_DIR / f"{name}.json").read_text())
     return data, meta
+
+
+def flashsac_hydra_env_kwargs(recorded):
+    """Env-factory kwargs as Hydra passes them now: recorded kwargs plus keys added to the env config since."""
+    import yaml  # installed with the flashsac extra, the only one that calls this
+
+    env_config = yaml.safe_load(FLASHSAC_ENV_CONFIG.read_text())["env"]
+    return {**recorded, "max_epochs": env_config["max_epochs"]}
 
 
 def assert_close(actual, expected, what):

@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from conftest import GOLDEN_DIR
+from conftest import GOLDEN_DIR, flashsac_hydra_env_kwargs
 
 pytestmark = pytest.mark.sim
 
@@ -78,7 +78,7 @@ class _CapturedEnv:
 
 
 def _flashsac_variants():
-    golden = _golden_meta(FLASHSAC_GOLDEN)["env_kwargs"]
+    golden = flashsac_hydra_env_kwargs(_golden_meta(FLASHSAC_GOLDEN)["env_kwargs"])
     without_rewards = {k: v for k, v in golden.items() if k != "reward_cfg"}
     return {
         "golden": golden,
@@ -127,9 +127,9 @@ def _flashsac_clip_for(requested_clip, monkeypatch):
         raise _ClipCaptured(args.clip)
 
     monkeypatch.setattr(constructors, "get_all_env_cfg", capture_clip)
+    hydra_kwargs = flashsac_hydra_env_kwargs({"clip": requested_clip})
     with pytest.raises(_ClipCaptured) as captured:
-        flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, {"clip": requested_clip}, SNAPSHOT_SEED,
-                                      NEUTRAL_ENV_NAME)
+        flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED, NEUTRAL_ENV_NAME)
     return captured.value.clip
 
 

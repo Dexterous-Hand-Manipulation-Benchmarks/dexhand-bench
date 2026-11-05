@@ -7,7 +7,7 @@ observation capture across the step-199 time-out, online metrics).
 import pytest
 import torch
 
-from conftest import assert_close, load_golden
+from conftest import assert_close, flashsac_hydra_env_kwargs, load_golden
 
 pytestmark = pytest.mark.sim
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
@@ -15,7 +15,7 @@ flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the fl
 
 def test_rollout_matches_golden(reseed):
     data, meta = load_golden("flashsac_allegro_box")
-    kwargs = meta["env_kwargs"]
+    kwargs = flashsac_hydra_env_kwargs(meta["env_kwargs"])
     reseed(meta["seed"])
     raw_env = flash_dex.make_dexmachina_env(meta["num_envs"], "cpu", kwargs, meta["seed"], kwargs["env_name"])
     env = flash_dex.GenesisFlashSACWrapper(raw_env, rl_device="cpu")
