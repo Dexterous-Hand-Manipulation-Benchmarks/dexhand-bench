@@ -13,7 +13,7 @@ pytestmark = pytest.mark.sim
 td3_dex = pytest.importorskip("fast_td3.environments.dexmachina_env", reason="needs the fasttd3 extra")
 
 
-def test_rollout_matches_golden(reseed):
+def test_rollout_matches_golden(reseed, isolated_hand_cfgs):
     from dexmachina.envs import BaseEnv
     from dexmachina.envs.constructors import get_all_env_cfg
     from fast_td3.hyperparams import DexMachinaArgs

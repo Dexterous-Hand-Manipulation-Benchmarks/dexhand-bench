@@ -49,3 +49,22 @@ def reseed(genesis_cpu):
         set_random_seed(seed)
 
     return _reseed
+
+
+@pytest.fixture
+def isolated_hand_cfgs(monkeypatch):
+    """Let the test build envs against copies of dexmachina's module-level hand configs.
+
+    Every env build extends a hand's ``kpt_link_names`` list in place (dexmachina ``robot.py``,
+    ``link_names += ...`` on a shallow copy), so a later test in the same process would see the grown list.
+    """
+    import copy
+    import importlib
+    import pkgutil
+
+    hand_cfgs = importlib.import_module("dexmachina.envs.hand_cfgs")
+    for module_info in pkgutil.iter_modules(hand_cfgs.__path__):
+        module = importlib.import_module(f"{hand_cfgs.__name__}.{module_info.name}")
+        for name in dir(module):
+            if name.upper().endswith("_CFGS"):
+                monkeypatch.setattr(module, name, copy.deepcopy(getattr(module, name)))

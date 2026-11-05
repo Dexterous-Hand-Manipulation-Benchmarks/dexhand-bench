@@ -13,7 +13,7 @@ pytestmark = pytest.mark.sim
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
 
 
-def test_rollout_matches_golden(reseed):
+def test_rollout_matches_golden(reseed, isolated_hand_cfgs):
     data, meta = load_golden("flashsac_allegro_box")
     kwargs = flashsac_hydra_env_kwargs(meta["env_kwargs"])
     reseed(meta["seed"])
