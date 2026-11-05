@@ -1,4 +1,7 @@
+import gzip
+import json
 import sys
+import tempfile
 
 import pandas as pd
 import wandb
@@ -64,9 +67,6 @@ def debug_get_wandb_run():
 def test_extract_single_run():
     # Test 1: Direct wandb-history.jsonl file download
     print("\n--- TEST 1: Direct File Download ('wandb-history.jsonl') ---")
-    import gzip
-    import json
-    import tempfile
     file_records = []
     try:
         target_f = None

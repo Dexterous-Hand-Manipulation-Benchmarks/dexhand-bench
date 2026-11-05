@@ -4,12 +4,8 @@ import math
 import pytest
 import torch
 
-from conftest import flashsac_hydra_env_kwargs
+from conftest import flashsac_env_kwargs
 from fakes import FakeDexEnv
-
-# The reported runs (scripts/flashsac/train.sh).
-REPORTED_ENV_STEPS = 50_000_896
-REPORTED_NUM_TRAIN_ENVS = 1024
 
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
 
@@ -73,11 +69,12 @@ def test_tracking_errors_leave_out_metrics_dexmachina_does_not_provide():
 
 
 def test_curriculum_clock_visits_every_epoch_once_in_order():
-    max_epochs = flashsac_hydra_env_kwargs({})["max_epochs"]
-    num_interaction_steps = REPORTED_ENV_STEPS / REPORTED_NUM_TRAIN_ENVS
+    max_epochs = flashsac_env_kwargs({})["max_epochs"]
+    num_interaction_steps = flash_dex.REPORTED_INTERACTION_STEPS
     epochs = [
         flash_dex.curriculum_epoch(step, num_interaction_steps, max_epochs)
-        for step in range(1, int(num_interaction_steps + 1))
+        for step in range(1, num_interaction_steps + 1)
     ]
     # The reported run size divides evenly, so the last step lands on max_epochs itself.
     assert list(dict.fromkeys(epochs)) == list(range(max_epochs + 1))
+

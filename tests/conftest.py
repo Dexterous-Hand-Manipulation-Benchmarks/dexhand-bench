@@ -12,6 +12,9 @@ FLASHSAC_ENV_CONFIG = Path(__file__).parents[1] / "algorithms/FlashSAC/configs/e
 ATOL = 1e-4
 RTOL = 1e-4
 
+# dexmachina finds a hand's config dict by this attribute suffix (get_hand_specific_cfg in envs/robot.py).
+HAND_CFG_SUFFIX = "_CFGS"
+
 
 def load_golden(name):
     data = np.load(GOLDEN_DIR / f"{name}.npz")
@@ -19,9 +22,9 @@ def load_golden(name):
     return data, meta
 
 
-def flashsac_hydra_env_kwargs(recorded):
+def flashsac_env_kwargs(recorded):
     """Env-factory kwargs as Hydra passes them now: recorded kwargs plus keys added to the env config since."""
-    import yaml  # installed with the flashsac extra, the only one that calls this
+    import yaml  # optional dependency (flashsac extra); only the flashsac tests call this
 
     env_config = yaml.safe_load(FLASHSAC_ENV_CONFIG.read_text())["env"]
     return {**recorded, "max_epochs": env_config["max_epochs"]}
@@ -66,5 +69,5 @@ def isolated_hand_cfgs(monkeypatch):
     for module_info in pkgutil.iter_modules(hand_cfgs.__path__):
         module = importlib.import_module(f"{hand_cfgs.__name__}.{module_info.name}")
         for name in dir(module):
-            if name.upper().endswith("_CFGS"):
+            if name.upper().endswith(HAND_CFG_SUFFIX):
                 monkeypatch.setattr(module, name, copy.deepcopy(getattr(module, name)))
