@@ -99,3 +99,35 @@ def test_env_config_reward_overrides_cannot_be_written():
     config = flash_dex.DexmachinaEnvConfig.from_hydra({"max_epochs": 10, "reward_cfg": {"bc_beta": 1.0}}, "")
     with pytest.raises(TypeError):
         config.reward_overrides["bc_beta"] = 2.0
+
+
+def test_env_config_rejects_curriculum_without_an_actuated_object():
+    with pytest.raises(ValueError) as error:
+        flash_dex.DexmachinaEnvConfig.from_hydra(
+            {"max_epochs": 10, "curriculum": True, "actuate_object": False}, "dexmachina/box"
+        )
+    message = str(error.value)
+    assert "curriculum" in message
+    assert "actuate_object" in message
+
+
+def _applied_config(**changes):
+    values = dict(
+        use_contact_reward=True, object_actuated=True, use_curriculum=True, zero_epoch=100,
+        reward_weights={"bc_beta": 1.0, "contact_rew_weight": 2.0}, use_imi_rew=True, use_bc_rew=True,
+        hand="allegro_left",
+    )
+    return flash_dex.AppliedEnvConfig(**{**values, **changes})
+
+
+def test_applied_config_mismatches_names_each_differing_value():
+    configured = _applied_config()
+    applied = _applied_config(zero_epoch=50, reward_weights={"bc_beta": 1.0, "contact_rew_weight": 3.0})
+    assert configured.mismatches(applied) == [
+        "zero_epoch: configured 100, applied 50",
+        "reward_weights.contact_rew_weight: configured 2.0, applied 3.0",
+    ]
+
+
+def test_applied_config_without_differences_has_no_mismatches():
+    assert _applied_config().mismatches(_applied_config()) == []

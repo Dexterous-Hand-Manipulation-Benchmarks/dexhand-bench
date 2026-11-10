@@ -96,6 +96,8 @@ def test_flashsac_env_config(variant, hydra_kwargs, genesis_cpu, monkeypatch):
     import dexmachina.envs.base_env as base_env
 
     monkeypatch.setattr(base_env, "BaseEnv", _CapturedEnv)
+    # The stub is not a built env, so there is nothing to read back from it.
+    monkeypatch.setattr(flash_dex, "verify_applied_config", lambda env, expected: None)
     env = flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED,
                                         hydra_kwargs["env_name"])
     snapshot = {"env_kwargs": _normalise(env.env_kwargs), "reward_module_cfg": _normalise(env.reward_module.cfg)}
@@ -155,3 +157,37 @@ def test_flashsac_keeps_other_clip_ranges(requested, monkeypatch):
 def test_flashsac_rejects_unparseable_clip(monkeypatch):
     with pytest.raises(ValueError):
         _flashsac_clip_for(FLASHSAC_YAML_DEFAULT_CLIP, monkeypatch)
+
+
+def _flashsac_error_for(overrides, monkeypatch):
+    flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
+    import dexmachina.envs.base_env as base_env
+
+    monkeypatch.setattr(base_env, "BaseEnv", _CapturedEnv)
+    monkeypatch.setattr(flash_dex, "verify_applied_config", lambda env, expected: None)
+    hydra_kwargs = {**FLASHSAC_VARIANTS["golden"], **overrides}
+    with pytest.raises(ValueError) as error:
+        flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED,
+                                      hydra_kwargs["env_name"])
+    return str(error.value)
+
+
+def test_flashsac_rejects_misspelled_reward_key(monkeypatch):
+    golden_rewards = FLASHSAC_VARIANTS["golden"]["reward_cfg"]
+    rewards = {**golden_rewards, "contac_rew_weight": 3.0}
+    assert "contac_rew_weight" in _flashsac_error_for({"reward_cfg": rewards}, monkeypatch)
+
+
+def test_flashsac_rejects_reward_key_that_would_overwrite_an_env_arg(monkeypatch):
+    rewards = {**FLASHSAC_VARIANTS["golden"]["reward_cfg"], "max_epochs": 1}
+    assert "max_epochs" in _flashsac_error_for({"reward_cfg": rewards}, monkeypatch)
+
+
+def test_flashsac_rejects_max_epochs_within_the_zeroing_period(monkeypatch):
+    from dexmachina.envs.constructors import get_common_argparser
+
+    num_zero_epoch = get_common_argparser().parse_known_args([])[0].num_zero_epoch
+    message = _flashsac_error_for({"max_epochs": num_zero_epoch}, monkeypatch)
+    assert "max_epochs" in message
+    assert "num_zero_epoch" in message
+    assert str(num_zero_epoch) in message
