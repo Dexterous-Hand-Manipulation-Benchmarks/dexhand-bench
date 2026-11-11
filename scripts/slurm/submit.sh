@@ -1,6 +1,6 @@
 #!/bin/bash
 # Submit a SLURM job with partition/account/time/... from configs/.
-# Usage: scripts/slurm/submit.sh <job> [extra sbatch flags]    (job: reppo, ppo)
+# Usage: scripts/slurm/submit.sh <job> [extra sbatch flags]    (job: reppo, ppo, dexhand-ppo)
 # Run variables pass through, e.g.: HAND=xhand SEED=1 scripts/slurm/submit.sh ppo
 set -e
 JOB="${1:?usage: scripts/slurm/submit.sh <job> [sbatch flags]}"; shift

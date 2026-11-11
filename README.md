@@ -14,6 +14,7 @@ exact upstream commit we started from, so they can be upstreamed later.
 |---|---|---|
 | `algorithms/FlashSAC` | [FlashSAC](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/FlashSAC) | [Holiday-Robot/FlashSAC](https://github.com/Holiday-Robot/FlashSAC) |
 | `algorithms/FastTD3` | [FastTD3](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/FastTD3) | [younggyoseo/FastTD3](https://github.com/younggyoseo/FastTD3) |
+| `algorithms/dexhand-ppo` | [dexhand-ppo](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexhand-ppo) | (our own PPO, no upstream) |
 | `algorithms/reppo` | [reppo](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/reppo) | [cvoelcker/reppo](https://github.com/cvoelcker/reppo) |
 | `environments/dexmachina` | [dexmachina](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexmachina) | [MandiZhao/dexmachina](https://github.com/MandiZhao/dexmachina) |
 | `environments/Genesis` | [Genesis](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/Genesis) | [MandiZhao/Genesis](https://github.com/MandiZhao/Genesis) (`older` branch, Genesis 0.2.1) |
@@ -29,7 +30,7 @@ Requires [uv](https://docs.astral.sh/uv/) and git.
 git clone https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexhand-bench.git
 cd dexhand-bench
 git submodule update --init      # not --recursive: Genesis' own submodules are not needed
-uv sync --extra flashsac         # or fasttd3, reppo, ppo
+uv sync --extra flashsac         # or fasttd3, reppo, ppo, dexhand-ppo
 ```
 
 Each method is a uv *extra*. The methods pin incompatible versions (gymnasium,
@@ -80,7 +81,8 @@ Log in to W&B once with `uv run wandb login`.
 | `scripts/flashsac/pre_run_test.py` | Short smoke run for every hand/clip before a long sweep |
 | `scripts/fasttd3/train.sh`, `scripts/fasttd3/test_run.sh` | FastTD3 sweep / smoke test |
 | `scripts/reppo/run_and_eval.sh` | REPPO sweep with evaluation, videos and ADD |
-| `scripts/slurm/submit.sh <reppo\|ppo>` | Submit a cluster job with the `slurm` settings from `configs/` |
+| `scripts/dexhand_ppo/train.sh` | One dexhand-ppo run (`PRESET`, `HAND`, `CLIP`, `SEED`; Hydra overrides pass through) |
+| `scripts/slurm/submit.sh <reppo\|ppo\|dexhand-ppo>` | Submit a cluster job with the `slurm` settings from `configs/` |
 | `scripts/analysis/get_training_data.py` | Export training curves from W&B to CSV (`--group all` for every method) |
 
 All scripts use the uv environment of their method and the W&B settings from
@@ -93,6 +95,7 @@ jobs pass through, e.g. `HAND=xhand SEED=1 scripts/slurm/submit.sh ppo`.
 uv run --exact --extra flashsac pytest -m "not sim"   # unit tests, ~10 s
 uv run --exact --extra flashsac pytest                # + simulator tests, ~30 s (first run ~1 min: kernel compilation)
 uv run --exact --extra fasttd3 pytest                 # FastTD3 integration
+uv run --exact --extra dexhand-ppo pytest             # dexhand-ppo adapter + simulator smoke test
 ```
 
 Tests for a method that is not installed are skipped, so run the suite once per

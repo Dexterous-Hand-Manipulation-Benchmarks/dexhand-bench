@@ -17,3 +17,7 @@ slurm:
       time: "16:00:00"
     ppo:
       time: "00:30:00"
+    dexhand-ppo:
+      # 50M steps: rl_games PPO needed ~1 h on an A100 (lab report Fig. 5); default does 4x the updates and
+      # reppo_budget ~50x, so measure and adjust. Checkpoints every 5M steps allow resuming after a timeout.
+      time: "06:00:00"

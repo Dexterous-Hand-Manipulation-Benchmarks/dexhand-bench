@@ -14,3 +14,7 @@
 [submodule "environments/Genesis"]
 	path = environments/Genesis
 	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/Genesis.git
+[submodule "algorithms/dexhand-ppo"]
+	path = algorithms/dexhand-ppo
+	url = https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexhand-ppo.git
+	branch = main

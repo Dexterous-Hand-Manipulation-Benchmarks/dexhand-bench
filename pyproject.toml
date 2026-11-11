@@ -53,6 +53,11 @@ fasttd3 = [
 reppo = [
     "reppo",
 ]
+# Our own PPO (algorithms/dexhand-ppo), replacing the rl_games baseline below.
+dexhand-ppo = [
+    "dexhand-ppo",
+    "torch==2.5.1",
+]
 # dexmachina's own rl_games PPO baseline.
 ppo = [
     "rl-games",
@@ -87,7 +92,9 @@ packages = ["src/dexhand_bench"]
 "src/wandb_logger.py" = "wandb_logger.py"
 
 [tool.uv]
-environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
+# Linux only on x86_64: taichi 1.7.3 (Genesis) has no Linux aarch64 wheels, so that platform cannot install anyway,
+# and newer uv versions refuse to lock a split they cannot resolve.
+environments = ["sys_platform == 'darwin'", "sys_platform == 'linux' and platform_machine == 'x86_64'"]
 # Genesis 0.2.1 pins mujoco==3.2.5, but only uses it to parse MJCF files,
 # which DexMachina never loads (hands and objects are URDF/mesh). REPPO's
 # mujoco_playground needs a newer mujoco.
@@ -98,6 +105,7 @@ conflicts = [
         { extra = "fasttd3" },
         { extra = "reppo" },
         { extra = "ppo" },
+        { extra = "dexhand-ppo" },
     ],
 ]
 
@@ -107,6 +115,7 @@ dexmachina = { path = "environments/dexmachina", editable = true }
 flashrl = { path = "algorithms/FlashSAC", editable = true }
 fast-td3 = { path = "algorithms/FastTD3", editable = true }
 reppo = { path = "algorithms/reppo", editable = true }
+dexhand-ppo = { path = "algorithms/dexhand-ppo", editable = true }
 rl-games = { git = "https://github.com/MandiZhao/rl_games", rev = "2c1a7718a3eed71e7c230b6bb8fb2897b0b1d0c4" }
 
 [tool.pytest.ini_options]
