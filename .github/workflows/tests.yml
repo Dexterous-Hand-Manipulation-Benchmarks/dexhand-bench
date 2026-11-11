@@ -18,6 +18,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
       - run: uv sync --locked --exact --extra ${{ matrix.extra }}
       - run: uv run --exact --extra ${{ matrix.extra }} pytest -m "not sim" -v
+      # Golden rollouts were recorded on macOS arm64; on this runner they check the platform-independent parts.
+      - if: matrix.extra == 'flashsac' || matrix.extra == 'fasttd3'
+        run: uv run --exact --extra ${{ matrix.extra }} pytest -m sim -v
       # Type check our code; it needs the full flashsac install. Non-blocking until ruff and basedpyright are clean.
       - if: matrix.extra == 'flashsac'
         continue-on-error: true

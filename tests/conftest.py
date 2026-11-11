@@ -1,5 +1,8 @@
 import json
+import platform
+import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -7,10 +10,15 @@ import pytest
 GOLDEN_DIR = Path(__file__).parent / "golden"
 FLASHSAC_ENV_CONFIG = Path(__file__).parents[1] / "algorithms/FlashSAC/configs/env/dexmachina.yaml"
 
-# Golden rollouts are recorded on CPU and are bit-identical between runs on the
-# same machine. The tolerance only absorbs float differences between platforms.
+# Golden rollouts are recorded on CPU and are bit-identical between runs on the same machine.
 ATOL = 1e-4
 RTOL = 1e-4
+# On another platform float rounding differs and contact dynamics amplify it past the tolerance, including the
+# done flags (early resets, object falling off). The first step over 1e-4 was 19 on Linux x86_64 for the macOS
+# arm64 fixtures, so 15 leaves a margin.
+CROSS_PLATFORM_STEPS = 15
+# Fixture JSONs store `recorded_on` in this format; compared_steps uses it.
+CURRENT_PLATFORM = f"{sys.platform}-{platform.machine()}"
 
 # dexmachina finds a hand's config dict by this attribute suffix (get_hand_specific_cfg in envs/robot.py).
 HAND_CFG_SUFFIX = "_CFGS"
@@ -20,6 +28,11 @@ def load_golden(name):
     data = np.load(GOLDEN_DIR / f"{name}.npz")
     meta = json.loads((GOLDEN_DIR / f"{name}.json").read_text())
     return data, meta
+
+
+def compared_steps(meta: dict[str, Any]) -> int:
+    """Steps whose values are compared with the fixture: all of them on the platform it was recorded on."""
+    return int(meta["steps"]) if meta["recorded_on"] == CURRENT_PLATFORM else CROSS_PLATFORM_STEPS
 
 
 def flashsac_env_kwargs(recorded):

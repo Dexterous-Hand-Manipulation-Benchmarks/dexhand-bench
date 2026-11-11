@@ -7,7 +7,7 @@ observation capture across the step-199 time-out, online metrics).
 import pytest
 import torch
 
-from conftest import assert_close, flashsac_env_kwargs, load_golden
+from conftest import assert_close, compared_steps, flashsac_env_kwargs, load_golden
 
 pytestmark = pytest.mark.sim
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
@@ -26,15 +26,21 @@ def test_rollout_matches_golden(reseed, isolated_hand_cfgs):
     obs0, _ = env.reset()
     assert_close(obs0, data["obs0"], "reset obs")
 
+    compared = compared_steps(meta)
     for t in range(meta["steps"]):
         obs, rew, term, trunc, infos = env.step(torch.from_numpy(data["actions"][t]))
-        assert_close(obs, data["obs"][t], f"obs at step {t}")
-        assert_close(rew, data["rew"][t], f"reward at step {t}")
+        # These hold whatever the dynamics do, so they are checked on every platform.
+        replaced = (infos["final_obs"] != obs).any(dim=-1)
+        assert torch.equal(replaced, term | trunc), f"final_obs replaced outside the done envs at step {t}"
+        scalars = sorted(k for k, v in infos.items() if isinstance(v, (int, float)))
+        assert scalars == meta["info_keys"]
+        if t >= compared:
+            continue
         assert_close(term, data["terminated"][t], f"terminated at step {t}")
         assert_close(trunc, data["truncated"][t], f"truncated at step {t}")
+        assert_close(obs, data["obs"][t], f"obs at step {t}")
+        assert_close(rew, data["rew"][t], f"reward at step {t}")
         assert_close(infos["final_obs"], data["final_obs"][t], f"final_obs at step {t}")
         for key in ("pos_dist", "rot_dist", "arti_dist"):
             assert_close(raw_env.rew_dict[key], data[key][t], f"{key} at step {t}")
-        scalars = sorted(k for k, v in infos.items() if isinstance(v, (int, float)))
-        assert scalars == meta["info_keys"]
         assert_close([infos[k] for k in scalars], data["info_scalars"][t], f"info scalars at step {t}")

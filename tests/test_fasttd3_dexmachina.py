@@ -7,7 +7,7 @@ own golden rollout.
 import pytest
 import torch
 
-from conftest import assert_close, load_golden
+from conftest import assert_close, compared_steps, load_golden
 
 pytestmark = pytest.mark.sim
 td3_dex = pytest.importorskip("fast_td3.environments.dexmachina_env", reason="needs the fasttd3 extra")
@@ -27,8 +27,12 @@ def test_rollout_matches_golden(reseed, isolated_hand_cfgs):
     env = td3_dex.GenesisFastTD3Wrapper(BaseEnv(**get_all_env_cfg(args, device="cpu")), rl_device="cpu")
 
     assert_close(env.reset(), data["obs0"], "reset obs")
+    compared = compared_steps(meta)
     for t in range(meta["steps"]):
         obs, rew, dones, infos = env.step(torch.from_numpy(data["actions"][t]))
+        assert torch.isfinite(obs).all() and torch.isfinite(rew).all(), f"non-finite obs or reward at step {t}"
+        if t >= compared:
+            continue
         assert_close(obs, data["obs"][t], f"obs at step {t}")
         assert_close(rew, data["rew"][t], f"reward at step {t}")
         assert_close(dones, data["dones"][t], f"dones at step {t}")
