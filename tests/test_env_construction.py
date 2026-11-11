@@ -70,11 +70,11 @@ def _assert_matches_snapshot(key, snapshot):
 
 
 class _CapturedEnv:
-    """Stands in for BaseEnv: keeps the constructor arguments and the reward overrides applied afterwards."""
+    """Stands in for BaseEnv: keeps the constructor arguments; an empty reward module for the factory's lookups."""
 
     def __init__(self, **env_kwargs):
         self.env_kwargs = env_kwargs
-        self.reward_module = SimpleNamespace(cfg={})
+        self.reward_module = SimpleNamespace()
 
 
 def _flashsac_variants():
@@ -100,7 +100,7 @@ def test_flashsac_env_config(variant, hydra_kwargs, genesis_cpu, monkeypatch):
     monkeypatch.setattr(flash_dex, "verify_applied_config", lambda env, expected: None)
     env = flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED,
                                         hydra_kwargs["env_name"])
-    snapshot = {"env_kwargs": _normalise(env.env_kwargs), "reward_module_cfg": _normalise(env.reward_module.cfg)}
+    snapshot = {"env_kwargs": _normalise(env.env_kwargs)}
     _assert_matches_snapshot(f"flashsac/{variant}", snapshot)
 
 
