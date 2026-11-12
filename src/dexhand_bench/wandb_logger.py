@@ -6,6 +6,8 @@ import numpy.typing as npt
 import torch
 import wandb
 import wandb.sdk.wandb_run
+from omegaconf import OmegaConf
+from omegaconf.errors import OmegaConfBaseException
 
 # --- Universal Metric Mapping ---
 METRIC_MAPPING: dict[str, str] = {
@@ -192,16 +194,24 @@ def _to_clean_dict(obj: Any) -> dict[str, Any]:
         return cast(dict[str, Any], obj)
     if hasattr(obj, "_content"):
         try:
-            from omegaconf import OmegaConf
             return cast(dict[str, Any], OmegaConf.to_container(obj, resolve=True))
-        except Exception:
-            pass
+        except OmegaConfBaseException as e:
+            raise ValueError(
+                f"Cannot log the run config: resolving the OmegaConf config failed ({e}). The config must be "
+                "resolved before it is logged, so W&B records the values the run uses. A value refers to a missing "
+                "key, an unset environment variable or a resolver that is not registered: fix that interpolation in "
+                "the config or the command-line override."
+            ) from e
     if hasattr(obj, "__dict__"):
         return cast(dict[str, Any], vars(obj))
     try:
         return cast(dict[str, Any], dict(obj))
-    except Exception:
-        return {}
+    except (TypeError, ValueError) as e:
+        raise TypeError(
+            f"Cannot log the run config: a {type(obj).__name__} cannot be converted to a dict, and logging an empty "
+            "config would hide the run's settings. Pass wandb.init(config=...) a dict, an OmegaConf config, an "
+            "argparse Namespace or a dataclass instance."
+        ) from e
 
 
 class UniversalLogger:
@@ -511,8 +521,13 @@ def _interceptor_wandb_init(*args: Any, **kwargs: Any) -> wandb.sdk.wandb_run.Ru
         wandb.define_metric("ppo/*", step_metric="global/env_step")
         wandb.define_metric("reppo/*", step_metric="global/env_step")
         wandb.define_metric("best/*", step_metric="global/env_step")
-    except Exception:
-        pass
+    except wandb.Error as e:
+        raise RuntimeError(
+            f"Could not bind the W&B metrics to global/env_step ({e}). Without it the dashboards plot every metric "
+            "against W&B's internal step, so runs of different methods are not comparable. wandb.define_metric acts "
+            "on the current run: most likely there is none (wandb.init failed or another run replaced it); "
+            "otherwise check that the installed wandb matches uv.lock (uv sync)."
+        ) from e
 
     return run
 

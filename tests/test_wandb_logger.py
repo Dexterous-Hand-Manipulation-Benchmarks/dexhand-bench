@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import torch
 import wandb
+from omegaconf import OmegaConf
 
 from dexhand_bench import wandb_logger
 from dexhand_bench.wandb_logger import UniversalLogger
@@ -87,3 +88,32 @@ def test_standardize_config_adds_benchmark_keys(logger):
     assert cfg["algo"] == "FlashSAC" and cfg["benchmark/algo"] == "FlashSAC"
     assert (cfg["hand"], cfg["clip"], cfg["seed"]) == ("xhand", "mixer-0-150", 3)
     assert cfg["gamma"] == 0.97 and cfg["batch_size"] == 4096
+
+
+def test_omegaconf_config_is_logged_resolved():
+    cfg = OmegaConf.create({"base": 3, "lr": "${base}"})
+    assert wandb_logger._to_clean_dict(cfg) == {"base": 3, "lr": 3}
+
+
+def test_unresolvable_omegaconf_config_raises_with_the_cause():
+    cfg = OmegaConf.create({"lr": "${missing_key}"})
+    with pytest.raises(ValueError, match="missing key") as excinfo:
+        wandb_logger._to_clean_dict(cfg)
+    assert excinfo.value.__cause__ is not None
+
+
+def test_config_that_is_no_mapping_raises():
+    with pytest.raises(TypeError, match="cannot be converted to a dict"):
+        wandb_logger._to_clean_dict(42)
+
+
+def test_failed_metric_binding_stops_the_run(logger, monkeypatch):
+    logger.install(algo="flash_sac", hand="h", clip="c", seed=0, num_train_envs=4)
+    monkeypatch.setattr(wandb_logger, "_ORIG_WANDB_INIT", lambda *args, **kwargs: object())
+
+    def failing_define_metric(*args, **kwargs):
+        raise wandb.Error("no active run")
+
+    monkeypatch.setattr(wandb, "define_metric", failing_define_metric)
+    with pytest.raises(RuntimeError, match="global/env_step"):
+        wandb.init(project="p", config={})
