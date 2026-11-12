@@ -4,12 +4,15 @@ import sys
 import tempfile
 
 import pandas as pd
+import requests
 import wandb
 
 from dexhand_bench.config import load_config, wandb_settings
 
 _wandb = wandb_settings(load_config())
 GROUP = "FlashSAC"
+# Each probe reports its failure and goes on; anything else is a bug and should surface.
+WANDB_ERRORS = (wandb.Error, requests.RequestException, OSError, ValueError, EOFError)
 RUN_ID_OR_NAME = sys.argv[1] if len(sys.argv) > 1 else "jumping-bee-137"
 
 api = wandb.Api()
@@ -49,7 +52,7 @@ def debug_get_wandb_run():
             print(raw_history.iloc[0].dropna().to_dict())
         else:
             print("[!] Default history() returned an empty DataFrame.")
-    except Exception as e:
+    except WANDB_ERRORS as e:
         print(f"[ERROR] run.history() failed: {e}")
 
     print("\n--- 3. scan_history() Check ---")
@@ -61,7 +64,7 @@ def debug_get_wandb_run():
             print(f"Sample keys in scan_history row: {list(first_row.keys())}")
         else:
             print("[!] scan_history() produced 0 records.")
-    except Exception as e:
+    except WANDB_ERRORS as e:
         print(f"[ERROR] run.scan_history() failed: {e}")
 
 def test_extract_single_run():
@@ -88,7 +91,7 @@ def test_extract_single_run():
             print(f"Result: {len(file_records)} records yielded via file download.")
         else:
             print("[!] No wandb-history.jsonl file found on run.")
-    except Exception as e:
+    except WANDB_ERRORS as e:
         print(f"[ERROR] File download failed: {e}")
 
     # Test 2: run.history(samples=5000, pandas=False)
@@ -96,7 +99,7 @@ def test_extract_single_run():
     try:
         hist = run.history(samples=5000, pandas=False)
         print(f"Result: {len(hist)} records yielded via run.history().")
-    except Exception as e:
+    except WANDB_ERRORS as e:
         print(f"[ERROR] run.history() failed: {e}")
 
     # Test 3: Client-side filtering of scalar metrics

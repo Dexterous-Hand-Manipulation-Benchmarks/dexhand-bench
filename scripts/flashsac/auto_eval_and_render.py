@@ -82,7 +82,10 @@ def main():
         print("\n" + "=" * 60)
         print(f"[INFO] Processing Run: {run.name} | W&B ID: {run.id}")
         print(f"[INFO] Hand: {hand} | Clip: {clip}")
-        print(f"[INFO] Configured Architecture -> Actor: {actor_dim}d ({actor_blocks}b) | Critic: {critic_dim}d ({critic_blocks}b)")
+        print(
+            f"[INFO] Configured Architecture -> Actor: {actor_dim}d ({actor_blocks}b) | "
+            f"Critic: {critic_dim}d ({critic_blocks}b)"
+        )
         print(f"[INFO] Found {len(step_dirs)} saved checkpoints.")
         print("=" * 60)
 

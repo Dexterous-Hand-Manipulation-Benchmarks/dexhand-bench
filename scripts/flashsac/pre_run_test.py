@@ -80,7 +80,7 @@ for hand in HANDS:
         except subprocess.TimeoutExpired:
             print("[TIMEOUT (>120s)]")
             results.append((config_name, "TIMEOUT"))
-        except Exception as e:
+        except OSError as e:
             print(f"[ERROR: {e}]")
             results.append((config_name, "ERROR"))
 

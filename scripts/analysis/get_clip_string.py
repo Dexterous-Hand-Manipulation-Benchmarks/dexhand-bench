@@ -1,5 +1,7 @@
 import os
 
+MAX_PEEK_BYTES = 10000
+
 
 def scan_all_configs():
     base_dir = "."
@@ -15,7 +17,7 @@ def scan_all_configs():
                 full_p = os.path.join(root, file)
                 print(f"Found: {full_p}")
                 # If it's a small yaml or json, peek inside for clip
-                if file.endswith((".yaml", ".yml", ".json")) and os.path.getsize(full_p) < 10000:
+                if file.endswith((".yaml", ".yml", ".json")) and os.path.getsize(full_p) < MAX_PEEK_BYTES:
                     try:
                         with open(full_p, "r", encoding="utf-8", errors="ignore") as f:
                             content = f.read()
@@ -24,8 +26,8 @@ def scan_all_configs():
                                 for line in content.splitlines():
                                     if "clip" in line.lower() or "env_name" in line.lower():
                                         print(f"     {line.strip()}")
-                    except Exception:
-                        pass
+                    except OSError as e:
+                        print(f"  -> skipped unreadable {file}: {e}")
 
 
 if __name__ == "__main__":
