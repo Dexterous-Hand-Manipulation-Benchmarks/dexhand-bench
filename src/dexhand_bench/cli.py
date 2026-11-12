@@ -1,13 +1,14 @@
 """`dexhand-bench` command line: read the benchmark config from shell scripts."""
 import argparse
 import shlex
+from collections.abc import Sequence
 
 from omegaconf import OmegaConf
 
 from dexhand_bench.config import load_config, sbatch_args, wandb_settings
 
 
-def main(argv=None) -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="dexhand-bench")
     sub = parser.add_subparsers(dest="command", required=True)
     show = sub.add_parser("config", help="print the merged config, or one value (empty if null)")

@@ -1,6 +1,7 @@
 """Characterisation tests for the unified W&B logger (no network, no simulator)."""
 import math
 
+import numpy as np
 import pytest
 import torch
 import wandb
@@ -66,6 +67,18 @@ def test_clean_val():
     assert UniversalLogger._clean_val(torch.tensor([1.0, 2.0])) is None
     assert UniversalLogger._clean_val(float("inf")) is None
     assert math.isclose(UniversalLogger._clean_val(torch.tensor(0.5)), 0.5)
+
+
+def test_clean_val_keeps_python_scalar_types():
+    assert type(UniversalLogger._clean_val(3)) is int
+    assert UniversalLogger._clean_val(3) == 3
+    # bool is an int subclass, so it is logged as the int 1
+    assert type(UniversalLogger._clean_val(True)) is int
+    assert UniversalLogger._clean_val(True) == 1
+    assert type(UniversalLogger._clean_val(np.float32(2.5))) is float
+    assert UniversalLogger._clean_val(np.float32(2.5)) == 2.5
+    assert type(UniversalLogger._clean_val(np.int64(4))) is int
+    assert UniversalLogger._clean_val(np.int64(4)) == 4
 
 
 def test_standardize_config_adds_benchmark_keys(logger):

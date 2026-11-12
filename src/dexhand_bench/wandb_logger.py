@@ -1,7 +1,8 @@
 import time
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
+import numpy.typing as npt
 import torch
 import wandb
 import wandb.sdk.wandb_run
@@ -113,10 +114,11 @@ METRIC_MAPPING: dict[str, str] = {
 }
 
 ALLOWED_NAMESPACES = (
-    "global/", "train/", "eval/", "env/", "perf/", "media/", "best/", "fast_td3/", "flash_sac/", "ppo/", "reppo/", "curriculum/"
+    "global/", "train/", "eval/", "env/", "perf/", "media/", "best/",
+    "fast_td3/", "flash_sac/", "ppo/", "reppo/", "curriculum/",
 )
 
-MODEL_SPECIFIC_ALLOWLIST = {
+MODEL_SPECIFIC_ALLOWLIST: dict[str, dict[str, str]] = {
     "fast_td3": {
         "q_loss": "fast_td3/q_loss",
         "qf_loss": "fast_td3/qf_loss",
@@ -161,40 +163,43 @@ _ORIG_WANDB_INIT = wandb.init
 _ORIG_RUN_LOG = wandb.sdk.wandb_run.Run.log
 
 
-def _extract_val(cfg: dict, *keys, default=None):
+def _extract_val(
+    cfg: dict[str, Any], *keys: str | list[str] | tuple[str, ...], default: Any = None
+) -> Any:
     for k in keys:
         if isinstance(k, (list, tuple)):
-            curr = cfg
+            curr: Any = cfg
             found = True
             for sub_k in k:
                 if isinstance(curr, dict) and sub_k in curr:
-                    curr = curr[sub_k]
+                    curr = cast(Any, curr[sub_k])
                 else:
                     found = False
                     break
             if found and curr is not None:
-                return curr
+                return cast(Any, curr)
         else:
-            if isinstance(cfg, dict) and k in cfg and cfg[k] is not None:
+            # configs from OmegaConf may be lists at runtime
+            if isinstance(cfg, dict) and k in cfg and cfg[k] is not None:  # pyright: ignore[reportUnnecessaryIsInstance]
                 return cfg[k]
     return default
 
 
-def _to_clean_dict(obj: Any) -> dict:
+def _to_clean_dict(obj: Any) -> dict[str, Any]:
     if obj is None:
         return {}
     if isinstance(obj, dict):
-        return obj
+        return cast(dict[str, Any], obj)
     if hasattr(obj, "_content"):
         try:
             from omegaconf import OmegaConf
-            return OmegaConf.to_container(obj, resolve=True)
+            return cast(dict[str, Any], OmegaConf.to_container(obj, resolve=True))
         except Exception:
             pass
     if hasattr(obj, "__dict__"):
-        return vars(obj)
+        return cast(dict[str, Any], vars(obj))
     try:
-        return dict(obj)
+        return cast(dict[str, Any], dict(obj))
     except Exception:
         return {}
 
@@ -228,8 +233,8 @@ class UniversalLogger:
         horizon_length: int = 16,
         keep_model_specific: bool = True,
         is_eval: bool = False,
-        **kwargs
-    ):
+        **kwargs: Any,
+    ) -> None:
         algo_key = algo.lower().replace("-", "_")
         if algo_key in ("fasttd3", "fast_td3"):
             algo_key = "fast_td3"
@@ -279,26 +284,71 @@ class UniversalLogger:
         clip = cls.clip or _extract_val(cfg, ("env", "clip"), "clip", default="unknown_clip")
 
         # 3. Seed & Environment Counts (Explicit Train vs Eval)
-        seed = cls.seed if cls.seed is not None else _extract_val(cfg, "seed", ("agent", "seed"), ("params", "seed"), default=0)
+        seed = cls.seed
 
         num_train = cls.num_train_envs or _extract_val(
-            cfg, ("env", "num_train_envs"), "num_train_envs", "num_envs", ("hyperparameters", "num_envs"), ("params", "config", "num_actors"), default=1024
+            cfg,
+            ("env", "num_train_envs"),
+            "num_train_envs",
+            "num_envs",
+            ("hyperparameters", "num_envs"),
+            ("params", "config", "num_actors"),
+            default=1024,
         )
         num_eval = cls.num_eval_envs or _extract_val(
             cfg, ("env", "num_eval_envs"), "num_eval_envs", "num_eval", default=None
         )
 
-        lr = _extract_val(cfg, ("agent", "learning_rate_init"), "actor_learning_rate", ("hyperparameters", "lr"), ("params", "config", "learning_rate"), default=0.0003)
-        actor_dim = _extract_val(cfg, ("agent", "actor_hidden_dim"), "actor_hidden_dim", ("hyperparameters", "actor_hidden_dim"), default=512)
-        critic_dim = _extract_val(cfg, ("agent", "critic_hidden_dim"), "critic_hidden_dim", ("hyperparameters", "critic_hidden_dim"), default=512)
-        actor_blocks = _extract_val(cfg, ("agent", "actor_num_blocks"), "actor_num_blocks", ("hyperparameters", "num_actor_layers"), default=1)
-        critic_blocks = _extract_val(cfg, ("agent", "critic_num_blocks"), "critic_num_blocks", ("hyperparameters", "num_critic_pred_layers"), default=1)
-        gamma = _extract_val(cfg, ("agent", "gamma"), ("hyperparameters", "gamma"), "gamma", ("params", "config", "gamma"), default=0.99)
-        batch_size = _extract_val(cfg, ("agent", "sample_batch_size"), "batch_size", ("hyperparameters", "num_mini_batches"), ("params", "config", "minibatch_size"), default=2048)
-        use_amp = _extract_val(cfg, ("agent", "use_amp"), "amp", ("platform", "amp_enabled"), ("params", "config", "mixed_precision"), default=True)
+        lr = _extract_val(
+            cfg,
+            ("agent", "learning_rate_init"),
+            "actor_learning_rate",
+            ("hyperparameters", "lr"),
+            ("params", "config", "learning_rate"),
+            default=0.0003,
+        )
+        actor_dim = _extract_val(
+            cfg, ("agent", "actor_hidden_dim"), "actor_hidden_dim", ("hyperparameters", "actor_hidden_dim"), default=512
+        )
+        critic_dim = _extract_val(
+            cfg,
+            ("agent", "critic_hidden_dim"),
+            "critic_hidden_dim",
+            ("hyperparameters", "critic_hidden_dim"),
+            default=512,
+        )
+        actor_blocks = _extract_val(
+            cfg, ("agent", "actor_num_blocks"), "actor_num_blocks", ("hyperparameters", "num_actor_layers"), default=1
+        )
+        critic_blocks = _extract_val(
+            cfg,
+            ("agent", "critic_num_blocks"),
+            "critic_num_blocks",
+            ("hyperparameters", "num_critic_pred_layers"),
+            default=1,
+        )
+        gamma = _extract_val(
+            cfg, ("agent", "gamma"), ("hyperparameters", "gamma"), "gamma", ("params", "config", "gamma"), default=0.99
+        )
+        batch_size = _extract_val(
+            cfg,
+            ("agent", "sample_batch_size"),
+            "batch_size",
+            ("hyperparameters", "num_mini_batches"),
+            ("params", "config", "minibatch_size"),
+            default=2048,
+        )
+        use_amp = _extract_val(
+            cfg,
+            ("agent", "use_amp"),
+            "amp",
+            ("platform", "amp_enabled"),
+            ("params", "config", "mixed_precision"),
+            default=True,
+        )
         normalize_reward = _extract_val(cfg, ("agent", "normalize_reward"), "reward_normalization", default=False)
 
-        canonical_dict = {
+        canonical_dict: dict[str, Any] = {
             "algo": algo_canonical,
             "hand": str(hand),
             "clip": str(clip),
@@ -335,9 +385,10 @@ class UniversalLogger:
             if val.numel() == 1:
                 item = val.item()
                 return None if not np.isfinite(item) else item
-            val = val.detach().cpu().numpy()
+            # torch ships incomplete stubs for Tensor.numpy
+            val = cast(npt.NDArray[Any], val.detach().cpu().numpy())  # pyright: ignore[reportUnknownMemberType]
         if isinstance(val, (np.ndarray, list, tuple)):
-            arr = np.asarray(val)
+            arr: npt.NDArray[Any] = np.asarray(cast(Any, val))
             if arr.size == 0 or not np.issubdtype(arr.dtype, np.number):
                 return None
             finite_mask = np.isfinite(arr)
@@ -349,7 +400,10 @@ class UniversalLogger:
                 return float(arr.item())
             return None
         if isinstance(val, (int, float, np.floating, np.integer)):
-            return None if not np.isfinite(val) else (float(val) if isinstance(val, (float, np.floating)) else int(val))
+            number = cast(float, val)
+            if not np.isfinite(number):
+                return None
+            return float(number) if isinstance(val, (float, np.floating)) else int(number)
         return val
 
     @classmethod
@@ -379,7 +433,7 @@ class UniversalLogger:
         env_step = cls._calculate_env_step(data, explicit_step)
         cls.last_env_step = max(cls.last_env_step, env_step)
 
-        sanitized_payload = {
+        sanitized_payload: dict[str, Any] = {
             "global/env_step": env_step,
             "global/step": env_step,
             "global/wall_time_s": time.time() - cls.start_time
@@ -413,7 +467,7 @@ class UniversalLogger:
         return sanitized_payload
 
 
-def _interceptor_wandb_init(*args, **kwargs):
+def _interceptor_wandb_init(*args: Any, **kwargs: Any) -> wandb.sdk.wandb_run.Run:
     """Intercepts wandb.init() to standardize all run configurations."""
     tags = list(kwargs.get("tags", []))
     if "curriculum" not in tags:
@@ -463,12 +517,12 @@ def _interceptor_wandb_init(*args, **kwargs):
     return run
 
 
-def _interceptor_run_log(self, data: dict[str, Any], *args, **kwargs):
+def _interceptor_run_log(self: wandb.sdk.wandb_run.Run, data: Any, *args: Any, **kwargs: Any) -> Any:
     """Intercepts Run.log() across all frameworks."""
     if not isinstance(data, dict):
         return _ORIG_RUN_LOG(self, data, *args, **kwargs)
     explicit_step = kwargs.get("step")
-    payload = UniversalLogger.build_sanitized_payload(data, explicit_step)
+    payload = UniversalLogger.build_sanitized_payload(cast(dict[str, Any], data), explicit_step)
     env_step = payload.get("global/env_step", explicit_step)
 
     # In evaluation mode, when resuming an existing run, or when explicit_step was not passed,
