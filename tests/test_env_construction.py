@@ -93,11 +93,11 @@ FLASHSAC_VARIANTS = _flashsac_variants()
 @pytest.mark.parametrize("variant, hydra_kwargs", FLASHSAC_VARIANTS.items(), ids=FLASHSAC_VARIANTS)
 def test_flashsac_env_config(variant, hydra_kwargs, genesis_cpu, monkeypatch):
     flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
-    import dexmachina.envs.base_env as base_env
+    import dexmachina.envs.factory as factory
 
-    monkeypatch.setattr(base_env, "BaseEnv", _CapturedEnv)
+    monkeypatch.setattr(factory, "BaseEnv", _CapturedEnv)
     # The stub is not a built env, so there is nothing to read back from it.
-    monkeypatch.setattr(flash_dex, "verify_applied_config", lambda env, expected: None)
+    monkeypatch.setattr(factory, "verify_applied_config", lambda env, expected: None)
     env = flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED,
                                         hydra_kwargs["env_name"])
     snapshot = {"env_kwargs": _normalise(env.env_kwargs)}
@@ -123,12 +123,12 @@ class _ClipCaptured(Exception):
 
 def _flashsac_clip_for(requested_clip, monkeypatch):
     flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
-    import dexmachina.envs.constructors as constructors
+    import dexmachina.envs.factory as factory
 
     def capture_clip(args, device):
         raise _ClipCaptured(args.clip)
 
-    monkeypatch.setattr(constructors, "get_all_env_cfg", capture_clip)
+    monkeypatch.setattr(factory, "get_all_env_cfg", capture_clip)
     hydra_kwargs = flashsac_env_kwargs({"clip": requested_clip})
     with pytest.raises(_ClipCaptured) as captured:
         flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED, NEUTRAL_ENV_NAME)
@@ -161,10 +161,10 @@ def test_flashsac_rejects_unparseable_clip(monkeypatch):
 
 def _flashsac_error_for(overrides, monkeypatch):
     flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
-    import dexmachina.envs.base_env as base_env
+    import dexmachina.envs.factory as factory
 
-    monkeypatch.setattr(base_env, "BaseEnv", _CapturedEnv)
-    monkeypatch.setattr(flash_dex, "verify_applied_config", lambda env, expected: None)
+    monkeypatch.setattr(factory, "BaseEnv", _CapturedEnv)
+    monkeypatch.setattr(factory, "verify_applied_config", lambda env, expected: None)
     hydra_kwargs = {**FLASHSAC_VARIANTS["golden"], **overrides}
     with pytest.raises(ValueError) as error:
         flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED,

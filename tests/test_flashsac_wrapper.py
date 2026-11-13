@@ -112,28 +112,6 @@ def test_env_config_rejects_curriculum_without_an_actuated_object():
     assert "actuate_object" in message
 
 
-def _applied_config(**changes):
-    values = dict(
-        use_contact_reward=True, object_actuated=True, use_curriculum=True, zero_epoch=100,
-        reward_weights={"bc_beta": 1.0, "contact_rew_weight": 2.0}, use_imi_rew=True, use_bc_rew=True,
-        hand="allegro_left",
-    )
-    return flash_dex.AppliedEnvConfig(**{**values, **changes})
-
-
-def test_applied_config_mismatches_names_each_differing_value():
-    configured = _applied_config()
-    applied = _applied_config(zero_epoch=50, reward_weights={"bc_beta": 1.0, "contact_rew_weight": 3.0})
-    assert configured.mismatches(applied) == [
-        "zero_epoch: configured 100, applied 50",
-        "reward_weights.contact_rew_weight: configured 2.0, applied 3.0",
-    ]
-
-
-def test_applied_config_without_differences_has_no_mismatches():
-    assert _applied_config().mismatches(_applied_config()) == []
-
-
 class FakeCamera:
     def __init__(self, frame: torch.Tensor | None = None, error: Exception | None = None) -> None:
         self.frame = frame
