@@ -2,6 +2,7 @@
 import dataclasses
 import math
 
+import numpy as np
 import pytest
 import torch
 
@@ -131,3 +132,37 @@ def test_applied_config_mismatches_names_each_differing_value():
 
 def test_applied_config_without_differences_has_no_mismatches():
     assert _applied_config().mismatches(_applied_config()) == []
+
+
+class FakeCamera:
+    def __init__(self, frame: torch.Tensor | None = None, error: Exception | None = None) -> None:
+        self.frame = frame
+        self.error = error
+
+    def render(self) -> tuple[torch.Tensor | None, None, None, None]:
+        if self.error is not None:
+            raise self.error
+        return self.frame, None, None, None
+
+
+def test_render_returns_the_camera_frame_as_a_batch() -> None:
+    raw, env = make()
+    raw._floating_camera = FakeCamera(frame=torch.full((4, 5, 3), 1.0))
+    image = env.render()
+    assert image.shape == (1, 4, 5, 3)
+    assert image.dtype == np.uint8
+    assert (image == 255).all()
+
+
+def test_render_failure_raises_instead_of_returning_a_black_image() -> None:
+    raw, env = make()
+    raw._floating_camera = FakeCamera(error=RuntimeError("no display"))
+    with pytest.raises(RuntimeError, match="num_record_episodes=0") as excinfo:
+        env.render()
+    assert "no display" in str(excinfo.value.__cause__)
+
+
+def test_render_without_camera_raises() -> None:
+    _, env = make()
+    with pytest.raises(RuntimeError, match="record_video"):
+        env.render()

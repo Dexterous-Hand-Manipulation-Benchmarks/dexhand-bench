@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 
 
@@ -21,6 +23,7 @@ class FakeDexEnv:
         self.t = torch.zeros(num_envs)
         self.rew_dict = {}
         self.received_actions = None
+        self._floating_camera: Any = None  # BaseEnv has none unless record_video is on
         self.dist = {"pos_dist": 0.01, "rot_dist": 0.1, "arti_dist": 0.05}
         self.success = {key: torch.ones(num_envs, dtype=torch.bool) for key in ("success_2cm", "success_5cm")}
 
