@@ -32,6 +32,23 @@ jobs:
         continue-on-error: true
         run: uv run --exact --extra flashsac basedpyright
 
+  # Separate from lint: these rules block, the rest of lint does not yet.
+  silent-failures:
+    runs-on: ubuntu-latest
+    env:
+      SILENT_FAILURE_RULES: BLE001,S110,S112,E722
+    steps:
+      - uses: actions/checkout@v7
+      - run: git submodule update --init algorithms/FlashSAC environments/dexmachina
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: >-
+          uv run --frozen --only-dev ruff check --config pyproject.toml --select $SILENT_FAILURE_RULES
+          src scripts tests
+          algorithms/FlashSAC/eval_dexmachina.py
+          algorithms/FlashSAC/check_curriculum.py
+          algorithms/FlashSAC/flash_rl/envs/dexmachina.py
+      - run: uv run --frozen --only-dev ruff check --isolated --select $SILENT_FAILURE_RULES environments/dexmachina
+
   lint:
     runs-on: ubuntu-latest
     continue-on-error: true   # until ruff and basedpyright are clean
