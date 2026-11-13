@@ -1,0 +1,1706 @@
+{
+  "order": [
+    "num_envs",
+    "vis",
+    "overlay",
+    "n_envs_per_row",
+    "texture_object",
+    "arctic_object",
+    "hand",
+    "frame_start",
+    "frame_end",
+    "clip",
+    "show_markers",
+    "interp",
+    "seed",
+    "action_mode",
+    "show_kpts",
+    "res_cap",
+    "hybrid_scales",
+    "hide_hand",
+    "last_n_frame",
+    "early_reset_threshold",
+    "aux_reset_thres",
+    "record_video",
+    "render_camera",
+    "raytrace",
+    "record_interval",
+    "use_teleop",
+    "retarget_name",
+    "teleop_fname",
+    "observe_tip_dist",
+    "observe_contact_force",
+    "task_rew_betas",
+    "no_object",
+    "show_fps",
+    "color_object",
+    "action_penalty",
+    "imi_rew_weight",
+    "imi_wrist_weight",
+    "contact_rew_weight",
+    "bc_rew_weight",
+    "bc_beta",
+    "contact_beta",
+    "skip_wrist_frame_contact",
+    "nomask_zero_contact",
+    "contact_rew_function",
+    "use_retarget_contact",
+    "retarget_worldfr",
+    "kp",
+    "kv",
+    "force_range",
+    "obj_stiffness",
+    "obj_damping",
+    "vis_contact",
+    "use_rl_games",
+    "is_eval",
+    "rand_init_ratio",
+    "chunk_ep_length",
+    "use_rand",
+    "rand_friction",
+    "rand_com",
+    "rand_mass",
+    "external_force",
+    "force_scale",
+    "torque_scale",
+    "convexify_object",
+    "actuate_object",
+    "objdex_baseline",
+    "multiply_all_rew",
+    "group_collisions",
+    "interval",
+    "first_ratio",
+    "first_stop_iter",
+    "second_stop_iter",
+    "kp_init",
+    "kv_init",
+    "force_range_init",
+    "max_epochs",
+    "num_zero_epoch",
+    "curr_schedule",
+    "fixed_mode",
+    "decay_rew",
+    "wait_epochs",
+    "decrease_rew",
+    "curr_rew_thres",
+    "deque_freq",
+    "grad_threshold",
+    "gain_mode",
+    "uniform_mode",
+    "upper_ratios",
+    "lower_ratios",
+    "deque_len",
+    "decay_solimp",
+    "solip_multiplier",
+    "resample_every_epoch",
+    "skip_grad",
+    "dialback_ep_len",
+    "dialback_min_epochs",
+    "dialback_ratios",
+    "maniptrans",
+    "friction_range",
+    "eps_finger_range",
+    "eps_object_Prange",
+    "eps_object_Rrange",
+    "maniptrans_mode",
+    "maniptrans_schedule"
+  ],
+  "actions": [
+    {
+      "option_strings": [
+        "-B",
+        "--num_envs"
+      ],
+      "dest": "num_envs",
+      "default": 1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--vis",
+        "-v"
+      ],
+      "dest": "vis",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--overlay",
+        "-ov"
+      ],
+      "dest": "overlay",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--n_envs_per_row",
+        "-nrow"
+      ],
+      "dest": "n_envs_per_row",
+      "default": null,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--texture_object",
+        "-to"
+      ],
+      "dest": "texture_object",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": "Show texture for the object and hide the actual URDF",
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--arctic_object",
+        "-ao"
+      ],
+      "dest": "arctic_object",
+      "default": "box",
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--hand"
+      ],
+      "dest": "hand",
+      "default": "inspire_hand",
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--frame_start",
+        "-fs"
+      ],
+      "dest": "frame_start",
+      "default": 40,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--frame_end",
+        "-fe"
+      ],
+      "dest": "frame_end",
+      "default": 200,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--clip",
+        "-cl"
+      ],
+      "dest": "clip",
+      "default": "box-40-200-s01-u01",
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--show_markers"
+      ],
+      "dest": "show_markers",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": "Whether to show contact markers",
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--interp"
+      ],
+      "dest": "interp",
+      "default": 1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": "Interpolation multiplier for the demo data",
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--seed"
+      ],
+      "dest": "seed",
+      "default": 42,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--action_mode",
+        "-am"
+      ],
+      "dest": "action_mode",
+      "default": "residual",
+      "type": null,
+      "choices": [
+        "residual",
+        "absolute",
+        "relative",
+        "hybrid",
+        "kinematic"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--show_kpts"
+      ],
+      "dest": "show_kpts",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": "Whether to show keypoints",
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--res_cap"
+      ],
+      "dest": "res_cap",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--hybrid_scales"
+      ],
+      "dest": "hybrid_scales",
+      "default": [
+        0.04,
+        0.5
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--hide_hand"
+      ],
+      "dest": "hide_hand",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--last_n_frame"
+      ],
+      "dest": "last_n_frame",
+      "default": -1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--early_reset_threshold",
+        "-ert"
+      ],
+      "dest": "early_reset_threshold",
+      "default": 0.5,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--aux_reset_thres"
+      ],
+      "dest": "aux_reset_thres",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--record_video",
+        "-rv"
+      ],
+      "dest": "record_video",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--render_camera",
+        "-rcam"
+      ],
+      "dest": "render_camera",
+      "default": "front",
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--raytrace",
+        "-ray"
+      ],
+      "dest": "raytrace",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--record_interval",
+        "-ri"
+      ],
+      "dest": "record_interval",
+      "default": -1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--use_teleop"
+      ],
+      "dest": "use_teleop",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--retarget_name",
+        "-rn"
+      ],
+      "dest": "retarget_name",
+      "default": "genesis",
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--teleop_fname"
+      ],
+      "dest": "teleop_fname",
+      "default": "data/scripted/tmp_box/tmp_box.npz",
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--observe_tip_dist",
+        "-obt"
+      ],
+      "dest": "observe_tip_dist",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--observe_contact_force",
+        "-obf"
+      ],
+      "dest": "observe_contact_force",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--task_rew_betas",
+        "-trb"
+      ],
+      "dest": "task_rew_betas",
+      "default": [
+        10,
+        1,
+        5
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--no_object",
+        "-no_obj"
+      ],
+      "dest": "no_object",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--show_fps",
+        "-fps"
+      ],
+      "dest": "show_fps",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--color_object",
+        "-co"
+      ],
+      "dest": "color_object",
+      "default": null,
+      "type": "str",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": "Color of the object to be rendered",
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--action_penalty",
+        "-ap"
+      ],
+      "dest": "action_penalty",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--imi_rew_weight",
+        "-imi"
+      ],
+      "dest": "imi_rew_weight",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--imi_wrist_weight",
+        "-imw"
+      ],
+      "dest": "imi_wrist_weight",
+      "default": 0.5,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--contact_rew_weight",
+        "-con"
+      ],
+      "dest": "contact_rew_weight",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--bc_rew_weight",
+        "-bc"
+      ],
+      "dest": "bc_rew_weight",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--bc_beta",
+        "-beta"
+      ],
+      "dest": "bc_beta",
+      "default": 500.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--contact_beta",
+        "-cbeta"
+      ],
+      "dest": "contact_beta",
+      "default": 10.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--skip_wrist_frame_contact",
+        "-swfc"
+      ],
+      "dest": "skip_wrist_frame_contact",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--nomask_zero_contact"
+      ],
+      "dest": "nomask_zero_contact",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--contact_rew_function",
+        "-crf"
+      ],
+      "dest": "contact_rew_function",
+      "default": "exp",
+      "type": "str",
+      "choices": [
+        "exp",
+        "sigmoid"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--use_retarget_contact",
+        "-urc"
+      ],
+      "dest": "use_retarget_contact",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--retarget_worldfr",
+        "-rwf"
+      ],
+      "dest": "retarget_worldfr",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--kp",
+        "-kp"
+      ],
+      "dest": "kp",
+      "default": 200.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--kv",
+        "-kv"
+      ],
+      "dest": "kv",
+      "default": 20.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--force_range",
+        "-fr"
+      ],
+      "dest": "force_range",
+      "default": 100.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--obj_stiffness",
+        "-ostiff"
+      ],
+      "dest": "obj_stiffness",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--obj_damping",
+        "-odamp"
+      ],
+      "dest": "obj_damping",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--vis_contact",
+        "-vc"
+      ],
+      "dest": "vis_contact",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--use_rl_games",
+        "-rlg"
+      ],
+      "dest": "use_rl_games",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--is_eval",
+        "-eval"
+      ],
+      "dest": "is_eval",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--rand_init_ratio",
+        "-randr"
+      ],
+      "dest": "rand_init_ratio",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--chunk_ep_length",
+        "-chunk"
+      ],
+      "dest": "chunk_ep_length",
+      "default": -1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--use_rand",
+        "-rand"
+      ],
+      "dest": "use_rand",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--rand_friction",
+        "-rf"
+      ],
+      "dest": "rand_friction",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--rand_com",
+        "-rc"
+      ],
+      "dest": "rand_com",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--rand_mass",
+        "-rm"
+      ],
+      "dest": "rand_mass",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--external_force",
+        "-ef"
+      ],
+      "dest": "external_force",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--force_scale",
+        "-fscale"
+      ],
+      "dest": "force_scale",
+      "default": 5.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--torque_scale",
+        "-tscale"
+      ],
+      "dest": "torque_scale",
+      "default": 0.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--convexify_object",
+        "-cvf"
+      ],
+      "dest": "convexify_object",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--actuate_object",
+        "-act"
+      ],
+      "dest": "actuate_object",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--objdex_baseline",
+        "-objdex"
+      ],
+      "dest": "objdex_baseline",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--multiply_all_rew",
+        "-mar"
+      ],
+      "dest": "multiply_all_rew",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--group_collisions",
+        "-gcol"
+      ],
+      "dest": "group_collisions",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--interval"
+      ],
+      "dest": "interval",
+      "default": 500,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--first_ratio"
+      ],
+      "dest": "first_ratio",
+      "default": 0.3,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--first_stop_iter"
+      ],
+      "dest": "first_stop_iter",
+      "default": 7000,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--second_stop_iter"
+      ],
+      "dest": "second_stop_iter",
+      "default": 16000,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--kp_init"
+      ],
+      "dest": "kp_init",
+      "default": 100.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--kv_init"
+      ],
+      "dest": "kv_init",
+      "default": 10.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--force_range_init"
+      ],
+      "dest": "force_range_init",
+      "default": 50.0,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--max_epochs",
+        "-me"
+      ],
+      "dest": "max_epochs",
+      "default": 5000,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": "Maximum number of epochs to train the agent.",
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--num_zero_epoch",
+        "-nze"
+      ],
+      "dest": "num_zero_epoch",
+      "default": 1000,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--curr_schedule"
+      ],
+      "dest": "curr_schedule",
+      "default": "uniform",
+      "type": "str",
+      "choices": [
+        "fixed",
+        "exp",
+        "uniform"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--fixed_mode"
+      ],
+      "dest": "fixed_mode",
+      "default": "uniform",
+      "type": "str",
+      "choices": [
+        "exp",
+        "lin",
+        "uniform"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--decay_rew",
+        "-drw"
+      ],
+      "dest": "decay_rew",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--wait_epochs"
+      ],
+      "dest": "wait_epochs",
+      "default": 500,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--decrease_rew",
+        "-dr"
+      ],
+      "dest": "decrease_rew",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--curr_rew_thres"
+      ],
+      "dest": "curr_rew_thres",
+      "default": [
+        0.5,
+        0,
+        0,
+        0
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--deque_freq"
+      ],
+      "dest": "deque_freq",
+      "default": 1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--grad_threshold"
+      ],
+      "dest": "grad_threshold",
+      "default": 0.001,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--gain_mode",
+        "-gm"
+      ],
+      "dest": "gain_mode",
+      "default": "all",
+      "type": "str",
+      "choices": [
+        "all",
+        "kpkv",
+        "fr"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--uniform_mode",
+        "-um"
+      ],
+      "dest": "uniform_mode",
+      "default": "slow",
+      "type": "str",
+      "choices": [
+        "fast",
+        "slow"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--upper_ratios"
+      ],
+      "dest": "upper_ratios",
+      "default": [
+        0.8,
+        0.95,
+        0.95
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--lower_ratios"
+      ],
+      "dest": "lower_ratios",
+      "default": [
+        0.7,
+        0.9,
+        0.9
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--deque_len"
+      ],
+      "dest": "deque_len",
+      "default": 30,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--decay_solimp",
+        "-ds"
+      ],
+      "dest": "decay_solimp",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--solip_multiplier",
+        "-solip"
+      ],
+      "dest": "solip_multiplier",
+      "default": 0.95,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--resample_every_epoch",
+        "-resample"
+      ],
+      "dest": "resample_every_epoch",
+      "default": -1,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--skip_grad"
+      ],
+      "dest": "skip_grad",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--dialback_ep_len"
+      ],
+      "dest": "dialback_ep_len",
+      "default": 30,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--dialback_min_epochs"
+      ],
+      "dest": "dialback_min_epochs",
+      "default": 500,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--dialback_ratios"
+      ],
+      "dest": "dialback_ratios",
+      "default": [
+        0.98,
+        1.0,
+        1.0
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--maniptrans",
+        "-mpt"
+      ],
+      "dest": "maniptrans",
+      "default": false,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": true,
+      "required": false,
+      "help": null,
+      "action": "_StoreTrueAction"
+    },
+    {
+      "option_strings": [
+        "--friction_range"
+      ],
+      "dest": "friction_range",
+      "default": [
+        4,
+        1
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--eps_finger_range",
+        "-efr"
+      ],
+      "dest": "eps_finger_range",
+      "default": [
+        0.1,
+        0.05
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--eps_object_Prange",
+        "-eopr"
+      ],
+      "dest": "eps_object_Prange",
+      "default": [
+        0.1,
+        0.03
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--eps_object_Rrange",
+        "-eorr"
+      ],
+      "dest": "eps_object_Rrange",
+      "default": [
+        1.57,
+        0.52
+      ],
+      "type": "float",
+      "choices": null,
+      "nargs": "+",
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--maniptrans_mode",
+        "-mpmode"
+      ],
+      "dest": "maniptrans_mode",
+      "default": "fixed",
+      "type": "str",
+      "choices": [
+        "fixed",
+        "auto"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--maniptrans_schedule",
+        "-mpsch"
+      ],
+      "dest": "maniptrans_schedule",
+      "default": "exp",
+      "type": "str",
+      "choices": [
+        "exp",
+        "linear"
+      ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    }
+  ]
+}
