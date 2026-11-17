@@ -1,6 +1,6 @@
 """make_eval_env: the env settings the evaluation protocol needs, and a rollout through it."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import fields, replace
 from types import SimpleNamespace
 from typing import Any
@@ -17,7 +17,7 @@ import dexmachina.envs.factory as factory  # noqa: E402  (after the skip: needs 
 from dexmachina.envs.add_metric import ADD_PARTS  # noqa: E402
 from dexmachina.envs.base_env import BaseEnv  # noqa: E402
 from dexmachina.envs.benchmark_task import BENCHMARK_CLIPS, RunChoices, benchmark_spec  # noqa: E402
-from dexmachina.envs.evaluation import EvalRecorder, StepRecord, Trajectory  # noqa: E402
+from dexmachina.envs.evaluation import Trajectory, rollout_episode  # noqa: E402
 from dexmachina.envs.spec import EnvSpec  # noqa: E402
 from dexmachina.eval.compute_add import create_scene, get_all_add, load_part_verts  # noqa: E402
 
@@ -182,64 +182,17 @@ def test_the_eval_env_does_not_feed_the_curriculum(eval_env: BaseEnv) -> None:
     assert not eval_env.record_curriculum
 
 
-class _PreResetTap:
-    """Copies the object state and the env's counters before a step's reset, which overwrites them."""
-
-    def __init__(self, env: BaseEnv) -> None:
-        self.env = env
-        self.root_pos: FloatArray = np.empty(0)
-        self.root_quat: FloatArray = np.empty(0)
-        self.joint_pos: FloatArray = np.empty(0)
-        self.demo_frame: npt.NDArray[np.int64] = np.empty(0, dtype=np.int64)
-        self.nan_mask: npt.NDArray[np.bool_] = np.empty(0, dtype=np.bool_)
-        self._compute_intermediate_values: Callable[[], None] = env._compute_intermediate_values  # pyright: ignore[reportPrivateUsage]
-        env._compute_intermediate_values = self._tapped  # pyright: ignore[reportPrivateUsage]
-
-    def release(self) -> None:
-        self.env._compute_intermediate_values = self._compute_intermediate_values  # pyright: ignore[reportPrivateUsage]
-
-    def _tapped(self) -> None:
-        self._compute_intermediate_values()
-        obj = self.env.object
-        assert obj is not None
-        self.root_pos = obj.root_pos.detach().cpu().numpy().astype(np.float64)
-        self.root_quat = obj.root_quat.detach().cpu().numpy().astype(np.float64)
-        self.joint_pos = obj.dof_pos.detach().cpu().numpy().astype(np.float64)
-        self.demo_frame = self.env.episode_length_buf.detach().cpu().numpy().astype(np.int64)
-        self.nan_mask = self.env.nan_envs.detach().cpu().numpy().copy()
-
-
 def _rollout(env: BaseEnv, policy_seed: int) -> tuple[Trajectory, FloatArray]:
     """One eval episode with seeded uniform actions; returns the recorded trajectory and the demo states."""
     generator = torch.Generator(device=env.device).manual_seed(policy_seed)
-    num_steps: int = env.max_episode_length
+
+    def uniform_actions() -> torch.Tensor:
+        unit = torch.rand((env.num_envs, env.action_dim), generator=generator, device=env.device) * 2.0 - 1.0
+        return unit * env.action_clip
+
+    trajectory = rollout_episode(env, uniform_actions, HAND, CLIP, spec_hash="", dexmachina_sha="")
     assert env.object is not None
-    demo_states: torch.Tensor = env.object.demo_states
-    num_demo_frames: int = demo_states.shape[0]
-    recorder = EvalRecorder(num_steps, env.num_envs, num_demo_frames)
-    tap = _PreResetTap(env)
-    env.reset()
-    try:
-        for step in range(num_steps):
-            unit = torch.rand((env.num_envs, env.action_dim), generator=generator, device=env.device) * 2.0 - 1.0
-            _, _, _, time_outs, extras = env.step(unit * env.action_clip)
-            add = np.stack([extras["log"][f"add_{part}"].detach().cpu().numpy() for part in ADD_PARTS], axis=-1)
-            recorder.record(
-                StepRecord(
-                    object_root_pos=tap.root_pos,
-                    object_root_quat=tap.root_quat,
-                    object_joint_pos=tap.joint_pos,
-                    add=add.astype(np.float64),
-                    nan_mask=tap.nan_mask,
-                    reset_mask=time_outs.detach().cpu().numpy().copy(),
-                    dropped=np.zeros(env.num_envs, dtype=np.bool_),
-                    demo_frame=np.minimum(tap.demo_frame, num_demo_frames - 1),
-                )
-            )
-    finally:
-        tap.release()
-    trajectory = recorder.trajectory(HAND, CLIP, spec_hash="", dexmachina_sha="")
-    return trajectory, demo_states.detach().cpu().numpy().astype(np.float64)
+    return trajectory, env.object.demo_states.detach().cpu().numpy().astype(np.float64)
 
 
 def _offline_add(trajectory: Trajectory, demo_states: FloatArray) -> FloatArray:

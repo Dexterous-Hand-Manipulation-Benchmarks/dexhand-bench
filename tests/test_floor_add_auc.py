@@ -1,7 +1,8 @@
-"""The floor script's aggregation (per-frame ADD to AUC) and its summary; no simulator."""
+"""The floor script: its summary and cells without a simulator, its protocol against the old one on it."""
 
 import importlib.util
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,14 @@ import numpy as np
 import pytest
 import torch
 
+from conftest import isolate_hand_cfgs
+
 pytest.importorskip("dexmachina.eval.compute_add", reason="needs genesis and dexmachina")
+from dexmachina.envs.add_metric import ADD_AUC_THRESHOLDS, ADD_PARTS  # noqa: E402  (after the skip: needs dexmachina)
+from dexmachina.envs.benchmark_task import RunChoices, benchmark_spec  # noqa: E402
+from dexmachina.envs.evaluation import ADD_LOG_KEY  # noqa: E402
+from dexmachina.envs.factory import make_env  # noqa: E402
+from dexmachina.eval.compute_add import compute_add_stats  # noqa: E402
 
 SCRIPT = Path(__file__).parents[1] / "scripts/analysis/floor_add_auc.py"
 spec = importlib.util.spec_from_file_location("floor_add_auc", SCRIPT)
@@ -31,27 +39,10 @@ def _row(
     **overrides: Any,
 ) -> Any:
     values: dict[str, Any] = dict(
-        hand=hand, clip="box", policy=policy, seed=seed, num_envs=2, auc_overall=auc, auc_top=auc, auc_bottom=auc,
-        mean_add=mean_add, ep_length=200, early_resets=0, nan_envs=0, wall_seconds=1.0, error=error,
+        hand=hand, clip="box", policy=policy, seed=seed, auc_overall=auc, auc_top=auc, auc_bottom=auc,
+        mean_add=mean_add, drop_rate=0.0, nan_rate=0.0, wall_seconds=1.0, error=error,
     )  # fmt: skip
     return floor.CellRow(**{**values, **overrides})
-
-
-def test_auc_is_the_trapezoid_of_the_accuracy_curve_averaged_over_parts() -> None:
-    # Thresholds 0.01..0.09 (9 points on [0, 1]). Top part: ADD 0.025 everywhere, so accuracy is 0 at 0.01 and 0.02 and
-    # 1 from 0.03 on; the trapezoid over 8 equal intervals is 0.5 / 8 + 6 / 8 = 0.8125 (segment 0.02 -> 0.03 is 0.5).
-    # Bottom part: ADD 0.5 everywhere, so accuracy is 0 and the AUC 0.
-    frames = 4
-    stats = floor.add_stats({"top": np.full((2, frames), 0.025), "bottom": np.full((2, frames), 0.5)})
-    assert stats.auc_top == pytest.approx(0.8125)
-    assert stats.auc_bottom == 0.0
-    assert stats.auc_overall == pytest.approx(0.8125 / 2)
-    assert stats.mean_add == pytest.approx((0.025 + 0.5) / 2)
-
-
-def test_nan_add_counts_as_a_miss() -> None:
-    stats = floor.add_stats({"top": np.array([[0.0, NAN]]), "bottom": np.array([[0.0, NAN]])})
-    assert stats.auc_overall == pytest.approx(0.5)
 
 
 def test_summary_gives_mean_and_min_max_over_seeds() -> None:
@@ -67,69 +58,107 @@ def test_summary_lists_failed_cells_loudly_and_keeps_them_out_of_the_statistics(
     assert "| allegro_hand | box | zero | 1 | 0.3000 |" in text
 
 
-class ScriptedEnv:
-    """Replays scripted per-step outputs: terminated and ADD per step, NaN flags per step (each shaped by env)."""
-
-    action_dim = 2
-    action_clip = 1.0
-    device = "cpu"
-
-    def __init__(self, terminated: list[list[bool]], nan_flags: list[list[bool]], add: float = 0.0) -> None:
-        self.terminated = torch.tensor(terminated)
-        self.nan_flags = torch.tensor(nan_flags)
-        self.num_envs = self.terminated.shape[1]
-        self.max_episode_length = self.terminated.shape[0]
-        self.add = add
-        self.nan_envs = torch.zeros(self.num_envs, dtype=torch.bool)
-        self.steps_taken = 0
-
-    def reset(self) -> None:
-        self.steps_taken = 0
-
-    def step(self, actions: torch.Tensor) -> tuple[None, None, torch.Tensor, None, dict[str, dict[str, torch.Tensor]]]:
-        self.nan_envs = self.nan_flags[self.steps_taken]
-        terminated = self.terminated[self.steps_taken]
-        self.steps_taken += 1
-        frame = torch.full((self.num_envs,), self.add)
-        return None, None, terminated, None, {"log": {"add_top": frame, "add_bottom": frame}}
-
-
-def test_early_resets_count_terminations_before_the_last_step_only() -> None:
-    # 3 steps, 2 envs: step 0 has one termination, step 1 has two, the last step (a time-out) has two and is ignored.
-    env = ScriptedEnv(terminated=[[True, False], [True, True], [True, True]], nan_flags=[[False, False]] * 3)
-    result = floor.run_episode(env, floor.Policy.ZERO, seed=0)
-    assert result.early_resets == 3
-    assert result.ep_length == 3
-
-
-def test_nan_envs_counts_envs_that_were_nan_at_any_step() -> None:
-    # Env 0 is NaN at step 0 only, env 1 at steps 1 and 2, env 2 never: two distinct envs.
-    env = ScriptedEnv(
-        terminated=[[False] * 3] * 3, nan_flags=[[True, False, False], [False, True, False], [False, True, False]]
-    )
-    assert floor.run_episode(env, floor.Policy.ZERO, seed=0).nan_envs == 2
+def test_summary_gives_the_mean_drop_and_nan_rates() -> None:
+    text = floor.summarize([_row(seed=0, drop_rate=1.0, nan_rate=0.0), _row(seed=1, drop_rate=0.0, nan_rate=1.0)])
+    assert "| 0.1000 | 0.50 | 0.50 |" in text
 
 
 def test_run_cell_records_the_error_and_nan_metrics_when_the_env_cannot_be_built(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def failing_build(hand: str, clip: str, seed: int, num_envs: int) -> None:
+    def failing_build(hand: str, clip: str, seed: int) -> None:
         raise FileNotFoundError("no retargeted clip")
 
     monkeypatch.setattr(floor, "build_env", failing_build)
-    row = floor.run_cell("xhand", "box", floor.Policy.ZERO, 1, 2, {})
+    row = floor.run_cell("xhand", "box", floor.Policy.ZERO, 1, {})
     assert row.error == "FileNotFoundError: no retargeted clip"
-    assert (row.hand, row.clip, row.policy, row.seed, row.num_envs) == ("xhand", "box", "zero", 1, 2)
+    assert (row.hand, row.clip, row.policy, row.seed) == ("xhand", "box", "zero", 1)
     assert np.isnan(row.auc_overall) and np.isnan(row.mean_add)
-    assert row.ep_length == 0
 
 
-def test_run_cell_fills_the_row_from_the_episode_when_the_env_builds(monkeypatch: pytest.MonkeyPatch) -> None:
-    # ADD 0 everywhere: every threshold is met, accuracy is 1, so the AUC is 1 and the mean ADD 0.
-    env = ScriptedEnv(terminated=[[False, False], [True, False]], nan_flags=[[False, True]] * 2)
-    monkeypatch.setattr(floor, "build_env", lambda hand, clip, seed, num_envs: env)
-    row = floor.run_cell("allegro_hand", "box", floor.Policy.UNIFORM, 0, 2, {})
+def test_run_cell_fills_the_row_from_the_score_of_the_episode(monkeypatch: pytest.MonkeyPatch) -> None:
+    episode_score = floor.EvalScore(
+        auc_add=0.4, auc_add_of_mean=0.3, auc_add_part={"top": 0.5, "bottom": 0.3}, mean_add=0.07,
+        success_2cm=0.0, success_5cm=0.0, nan_rate=1.0, drop_rate=0.5,
+    )  # fmt: skip
+    monkeypatch.setattr(floor, "build_env", lambda hand, clip, seed: None)
+    monkeypatch.setattr(floor, "run_episode", lambda env, policy, seed, hand, clip: episode_score)
+    row = floor.run_cell("allegro_hand", "box", floor.Policy.UNIFORM, 0, {})
     assert row.error == ""
-    assert row.auc_overall == pytest.approx(1.0)
-    assert row.mean_add == 0.0
-    assert (row.ep_length, row.early_resets, row.nan_envs) == (2, 0, 1)
+    assert (row.auc_overall, row.auc_top, row.auc_bottom, row.mean_add) == (0.4, 0.5, 0.3, 0.07)
+    assert (row.drop_rate, row.nan_rate) == (0.5, 1.0)
+
+
+# Simulator tests: allegro hand, box clip, two zero-action rollouts (about 40 s on the CPU).
+HAND = "allegro_hand"
+CLIP = floor.BENCHMARK_CLIPS[0]
+SEED = 0
+OLD_PROTOCOL_NUM_ENVS = 2
+# The floor and the old protocol should agree to this (design: same physics, only the env count and the assist
+# gains differ); a difference above it must be traced to a named cause.
+FLOOR_PROTOCOL_TOLERANCE = 1e-4
+
+
+def _old_protocol_auc(num_envs: int) -> float:
+    """The floor as measured before: no early or fell-off resets, assist gains zeroed, its own scoring.
+
+    The zero action is deterministic, so seeding matters only for the uniform policy.
+    """
+    spec = benchmark_spec(RunChoices(hand=HAND, clip=CLIP, seed=SEED, num_envs=num_envs))
+    env: Any = make_env(replace(spec, early_reset_threshold=0.0), "cpu", {})
+    env.object.set_joint_gains(0.0, 0.0, force_range=0.0)
+    env.add_metric = env.object.setup_add_metric(num_samples=env.add_num_verts)
+    env.table_height = float("-inf")
+    env.record_curriculum = False
+    frames: dict[str, list[Any]] = {part: [] for part in ADD_PARTS}
+    env.reset()
+    for _ in range(env.max_episode_length):
+        extras = env.step(torch.zeros((env.num_envs, env.action_dim), device=env.device))[4]
+        for part, part_frames in frames.items():
+            part_frames.append(extras["log"][ADD_LOG_KEY.format(part=part)].detach().cpu().numpy().astype(np.float64))
+    add_by_part = {part: np.stack(part_frames, axis=1) for part, part_frames in frames.items()}
+    return compute_add_stats(add_by_part, list(ADD_AUC_THRESHOLDS))["auc"]["overall"]
+
+
+def _floor_score() -> Any:
+    env = floor.build_env(HAND, CLIP, SEED)
+    return floor.run_episode(env, floor.Policy.ZERO, SEED, HAND, CLIP)
+
+
+@pytest.mark.sim
+def test_the_floor_on_the_eval_env_matches_the_old_floor_protocol(
+    genesis_cpu: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isolate_hand_cfgs(monkeypatch)
+    pristine_cfgs = floor.snapshot_hand_cfgs()
+    old = _old_protocol_auc(OLD_PROTOCOL_NUM_ENVS)
+    floor.restore_hand_cfgs(pristine_cfgs)
+    floor_score = _floor_score()
+    assert floor_score.auc_add == pytest.approx(old, abs=FLOOR_PROTOCOL_TOLERANCE)
+    # The hand lets the box fall with a zero action; the record of that is the adapter's dropped flag.
+    assert floor_score.drop_rate == 1.0
+
+
+@pytest.mark.sim
+def test_the_uniform_policy_scores_the_same_twice_with_one_seed(
+    genesis_cpu: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isolate_hand_cfgs(monkeypatch)
+    env = floor.build_env(HAND, CLIP, SEED)
+    first = floor.run_episode(env, floor.Policy.UNIFORM, SEED, HAND, CLIP)
+    second = floor.run_episode(env, floor.Policy.UNIFORM, SEED, HAND, CLIP)
+    assert first == second
+
+
+def test_appending_to_a_csv_with_another_header_fails_loudly(tmp_path: Path) -> None:
+    csv_path = tmp_path / floor.RUNS_CSV
+    csv_path.write_text("hand,clip,policy,seed,num_envs,auc_overall,early_resets\nallegro_hand,box,zero,0,8,0.1,0\n")
+    with pytest.raises(ValueError, match="use a new --out-dir"):
+        floor.append_row(csv_path, _row())
+
+
+def test_appending_rows_writes_the_header_once(tmp_path: Path) -> None:
+    csv_path = tmp_path / floor.RUNS_CSV
+    floor.append_row(csv_path, _row(seed=0))
+    floor.append_row(csv_path, _row(seed=1))
+    assert len(csv_path.read_text().splitlines()) == 3
