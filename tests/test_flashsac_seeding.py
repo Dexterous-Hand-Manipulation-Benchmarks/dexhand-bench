@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 import torch
 
-from fakes import FakeDexEnv
+from fakes import FakeDexEnv, FakeDexVecEnv
 
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
 curriculum = pytest.importorskip("dexmachina.envs.curriculum")
@@ -47,7 +47,7 @@ def train(monkeypatch):
     spec.loader.exec_module(module)
 
     def create_fake_envs(**_):
-        env = flash_dex.GenesisFlashSACWrapper(CurriculumReseedingEnv(), rl_device="cpu")
+        env = flash_dex.GenesisFlashSACWrapper(FakeDexVecEnv(CurriculumReseedingEnv()), rl_device="cpu")
         return env, env, env
 
     monkeypatch.setattr(module, "create_envs", create_fake_envs)

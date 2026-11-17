@@ -70,11 +70,25 @@ def _assert_matches_snapshot(key, snapshot):
 
 
 class _CapturedEnv:
-    """Stands in for BaseEnv: keeps the constructor arguments; an empty reward module for the factory's lookups."""
+    """Stands in for BaseEnv: keeps the constructor arguments; an empty reward module for the factory's lookups.
+
+    The rest is what DexMachinaVecEnv reads when it wraps the env.
+    """
+
+    use_rl_games = True
+    chunk_ep_length = 0
 
     def __init__(self, **env_kwargs):
         self.env_kwargs = env_kwargs
         self.reward_module = SimpleNamespace()
+        self.num_envs = SNAPSHOT_NUM_ENVS
+        self.device = DEVICE
+
+    def _get_dones(self):
+        raise NotImplementedError
+
+    def reset_idx(self, env_idxs):
+        raise NotImplementedError
 
 
 def _flashsac_variants():
@@ -100,7 +114,7 @@ def test_flashsac_env_config(variant, hydra_kwargs, genesis_cpu, monkeypatch):
     monkeypatch.setattr(factory, "verify_applied_config", lambda env, expected: None)
     env = flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED,
                                         hydra_kwargs["env_name"])
-    snapshot = {"env_kwargs": _normalise(env.env_kwargs)}
+    snapshot = {"env_kwargs": _normalise(env.env.env_kwargs)}
     _assert_matches_snapshot(f"flashsac/{variant}", snapshot)
 
 

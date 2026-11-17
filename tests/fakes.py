@@ -48,3 +48,29 @@ class FakeDexEnv:
         if len(reset_ids) > 0:
             self.reset_idx(reset_ids)
         return self.get_observations(), torch.ones(self.num_envs), timeout.clone(), timeout.clone(), {}
+
+
+class FakeDexVecEnv:
+    """Stand-in for DexMachinaVecEnv over a FakeDexEnv: a time-out is terminated, never truncated."""
+
+    def __init__(self, env: FakeDexEnv) -> None:
+        self.env = env
+        self.num_envs = env.num_envs
+        self._final_obs = torch.zeros(env.num_envs, env.obs_dim)
+        original_reset_idx = env.reset_idx
+
+        def reset_idx(env_idxs):
+            self._final_obs[env_idxs] = env.get_observations()["policy"][env_idxs]
+            original_reset_idx(env_idxs)
+
+        env.reset_idx = reset_idx
+
+    def reset(self):
+        observations, _ = self.env.reset()
+        return observations["policy"].clone(), {}
+
+    def step(self, actions):
+        observations, reward, terminated, _, _ = self.env.step(actions)
+        final_obs = torch.where(terminated[:, None], self._final_obs, observations["policy"])
+        info = {"final_obs": final_obs, "log": {}}
+        return observations["policy"].clone(), reward.clone(), terminated, torch.zeros_like(terminated), info

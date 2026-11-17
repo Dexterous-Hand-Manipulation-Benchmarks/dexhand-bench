@@ -16,7 +16,7 @@ def _golden_kwargs(**overrides):
 
 
 def _build(kwargs, meta):
-    return flash_dex.make_dexmachina_env(meta["num_envs"], DEVICE, kwargs, meta["seed"], kwargs["env_name"])
+    return flash_dex.make_dexmachina_env(meta["num_envs"], DEVICE, kwargs, meta["seed"], kwargs["env_name"]).env
 
 
 def test_objdex_baseline_with_the_golden_rewards_is_rejected(genesis_cpu, isolated_hand_cfgs):
