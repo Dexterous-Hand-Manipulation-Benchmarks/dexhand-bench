@@ -5,6 +5,7 @@ The unit tests drive a fake env that runs dexmachina's real `BaseEnv._get_dones`
 the FlashSAC golden rollout.
 """
 
+import importlib.util
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
@@ -19,6 +20,9 @@ from dexmachina.envs.maniptrans_curr import ManipTransCurriculum  # noqa: E402
 from dexmachina.envs.spec import EnvSpec  # noqa: E402
 from dexmachina.envs.vec_env import AUTORESET_SAME_STEP, DexMachinaVecEnv  # noqa: E402
 from dexmachina.envs.vec_env_check import VecEnvContractError, check_vec_env  # noqa: E402
+
+# check_vec_env reads the spaces, which need the optional gymnasium (not in the dexhand-ppo extra).
+needs_gymnasium = pytest.mark.skipif(importlib.util.find_spec("gymnasium") is None, reason="gymnasium is optional")
 
 NUM_ENVS = 2
 OBS_DIM = 3
@@ -317,6 +321,7 @@ def test_returned_tensors_are_not_the_envs_buffers() -> None:
     assert info["log"]["pos_dist"].data_ptr() != env.rew_buf.data_ptr()
 
 
+@needs_gymnasium
 def test_conformance_check_passes_on_the_wrapper() -> None:
     check_vec_env(_vec(FakeBaseEnv(rewards=(0.0, 1.0), early_reset_threshold=EARLY_RESET_THRESHOLD)), steps=8)
 
@@ -334,6 +339,7 @@ class _AliasingVecEnv(DexMachinaVecEnv):
         return self.returned_obs, reward, terminated, truncated, info
 
 
+@needs_gymnasium
 def test_conformance_check_catches_returned_buffers_that_the_next_step_overwrites() -> None:
     with pytest.raises(VecEnvContractError, match="obs returned at step 0 changed when stepping again"):
         check_vec_env(_AliasingVecEnv(FakeBaseEnv()), steps=3)
@@ -345,6 +351,7 @@ class _WrongShapeVecEnv(DexMachinaVecEnv):
         return obs, reward[:1], terminated, truncated, info
 
 
+@needs_gymnasium
 def test_conformance_check_catches_wrong_shapes() -> None:
     with pytest.raises(VecEnvContractError, match=r"reward has shape \(1,\), expected \(2,\)"):
         check_vec_env(_WrongShapeVecEnv(FakeBaseEnv()), steps=1)
