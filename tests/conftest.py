@@ -67,12 +67,11 @@ def reseed(genesis_cpu):
     return _reseed
 
 
-@pytest.fixture
-def isolated_hand_cfgs(monkeypatch):
-    """Let the test build envs against copies of dexmachina's module-level hand configs.
+def isolate_hand_cfgs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let the caller build envs against copies of dexmachina's module-level hand configs.
 
     Every env build extends a hand's ``kpt_link_names`` list in place (dexmachina ``robot.py``,
-    ``link_names += ...`` on a shallow copy), so a later test in the same process would see the grown list.
+    ``link_names += ...`` on a shallow copy), so a later build in the same process would see the grown list.
     """
     import copy
     import importlib
@@ -84,3 +83,9 @@ def isolated_hand_cfgs(monkeypatch):
         for name in dir(module):
             if name.upper().endswith(HAND_CFG_SUFFIX):
                 monkeypatch.setattr(module, name, copy.deepcopy(getattr(module, name)))
+
+
+@pytest.fixture
+def isolated_hand_cfgs(monkeypatch):
+    """Isolate the hand configs for the duration of one test."""
+    isolate_hand_cfgs(monkeypatch)
