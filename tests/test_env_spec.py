@@ -65,3 +65,19 @@ def test_from_args_ignores_attributes_added_by_methods() -> None:
 def test_spec_is_frozen() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         EnvSpec().num_envs = 2  # type: ignore[misc]
+
+
+def test_json_round_trip_for_non_default_argv() -> None:
+    spec = EnvSpec.from_args(constructors.get_common_argparser().parse_args(NON_DEFAULT_ARGV))
+    assert EnvSpec.from_json(spec.to_json()) == spec
+
+
+@pytest.mark.parametrize("change", ["missing", "unknown"])
+def test_a_saved_spec_with_other_fields_than_envspec_is_refused(change: str) -> None:
+    saved = json.loads(EnvSpec().to_json())
+    if change == "missing":
+        del saved["hand"]
+    else:
+        saved["no_such_field"] = 1
+    with pytest.raises(ValueError, match="does not match this dexmachina's EnvSpec"):
+        EnvSpec.from_json(json.dumps(saved))

@@ -79,6 +79,21 @@ def test_a_maniptrans_spec_is_refused() -> None:
         factory.make_eval_env(replace(_training_spec(), maniptrans=True, actuate_object=False), CPU)
 
 
+def test_a_spec_without_rl_games_is_refused() -> None:
+    with pytest.raises(ValueError, match="use_rl_games=True"):
+        factory.make_eval_env(_training_spec(use_rl_games=False), CPU)
+
+
+def test_seeds_env_counts_and_training_lengths_share_the_task_hash() -> None:
+    assert factory.task_hash(_training_spec()) == factory.task_hash(
+        _training_spec(seed=7, num_envs=TRAINING_NUM_ENVS * 2, max_epochs=123)
+    )
+
+
+def test_another_clip_is_another_task() -> None:
+    assert factory.task_hash(_training_spec()) != factory.task_hash(_training_spec(clip="mixer-0-150-s01-01"))
+
+
 def test_the_training_spec_is_replaced_by_the_eval_spec(monkeypatch: pytest.MonkeyPatch) -> None:
     build = _FakeBuild(monkeypatch, _fake_env(factory.EVAL_CONFIG))
     factory.make_eval_env(_training_spec(), CPU)
