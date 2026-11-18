@@ -90,6 +90,12 @@ def test_seeds_env_counts_and_training_lengths_share_the_task_hash() -> None:
     )
 
 
+def test_numbers_written_as_ints_or_floats_share_the_task_hash() -> None:
+    assert factory.task_hash(_training_spec(task_rew_betas=(10, 1, 5))) == factory.task_hash(
+        _training_spec(task_rew_betas=(10.0, 1.0, 5.0))
+    )
+
+
 def test_another_clip_is_another_task() -> None:
     assert factory.task_hash(_training_spec()) != factory.task_hash(_training_spec(clip="mixer-0-150-s01-01"))
 
