@@ -395,13 +395,9 @@ GOLDEN_REWARD_OVERRIDES = {"force_penalty": 0.1, "task_rew_weight": 1.0, "bc_wri
 GOLDEN_CLIP = "box-30-230-s01-01"
 
 
-@pytest.mark.sim
-def test_real_env_matches_the_golden_rollout_and_conforms(
-    genesis_cpu: Any, reseed: Any, isolated_hand_cfgs: Any
-) -> None:
-    from conftest import assert_close, compared_steps, flashsac_env_kwargs, load_golden
+def _golden_vec_env(meta: dict[str, Any], reseed: Any) -> DexMachinaVecEnv:
+    from conftest import flashsac_env_kwargs
 
-    data, meta = load_golden("flashsac_allegro_box")
     max_epochs = flashsac_env_kwargs(meta["env_kwargs"])["max_epochs"]
     spec = replace(
         EnvSpec(), num_envs=meta["num_envs"], seed=meta["seed"], max_epochs=max_epochs, hand="allegro_hand",
@@ -410,7 +406,15 @@ def test_real_env_matches_the_golden_rollout_and_conforms(
         contact_rew_weight=3.0, contact_beta=10.0, bc_rew_weight=0.3, bc_beta=500.0, use_retarget_contact=True,
     )  # fmt: skip
     reseed(meta["seed"])
-    vec = DexMachinaVecEnv.from_spec(spec, "cpu", GOLDEN_REWARD_OVERRIDES)
+    return DexMachinaVecEnv.from_spec(spec, "cpu", GOLDEN_REWARD_OVERRIDES)
+
+
+@pytest.mark.sim
+def test_real_env_matches_the_golden_rollout(genesis_cpu: Any, reseed: Any, isolated_hand_cfgs: Any) -> None:
+    from conftest import assert_close, compared_steps, load_golden
+
+    data, meta = load_golden("flashsac_allegro_box")
+    vec = _golden_vec_env(meta, reseed)
 
     obs0, _ = vec.reset()
     assert_close(obs0, data["obs0"], "reset obs")
@@ -426,4 +430,11 @@ def test_real_env_matches_the_golden_rollout_and_conforms(
         assert_close(rew, data["rew"][t], f"reward at step {t}")
         assert_close(info["final_obs"], data["final_obs"][t], f"final_obs at step {t}")
 
-    check_vec_env(vec, steps=3)
+
+@pytest.mark.sim
+@needs_gymnasium
+def test_real_env_conforms(genesis_cpu: Any, reseed: Any, isolated_hand_cfgs: Any) -> None:
+    from conftest import load_golden
+
+    _, meta = load_golden("flashsac_allegro_box")
+    check_vec_env(_golden_vec_env(meta, reseed), steps=3)
