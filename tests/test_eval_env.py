@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from dataclasses import fields, replace
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -17,7 +17,7 @@ import dexmachina.envs.factory as factory  # noqa: E402  (after the skip: needs 
 from dexmachina.envs.add_metric import ADD_PARTS  # noqa: E402
 from dexmachina.envs.base_env import BaseEnv  # noqa: E402
 from dexmachina.envs.benchmark_task import BENCHMARK_CLIPS, RunChoices, benchmark_spec  # noqa: E402
-from dexmachina.envs.evaluation import Trajectory, rollout_episode  # noqa: E402
+from dexmachina.envs.evaluation import EnvReset, EnvStep, Trajectory, rollout_episode  # noqa: E402
 from dexmachina.envs.spec import EnvSpec  # noqa: E402
 from dexmachina.eval.compute_add import create_scene, get_all_add, load_part_verts  # noqa: E402
 
@@ -186,7 +186,7 @@ def _rollout(env: BaseEnv, policy_seed: int) -> tuple[Trajectory, FloatArray]:
     """One eval episode with seeded uniform actions; returns the recorded trajectory and the demo states."""
     generator = torch.Generator(device=env.device).manual_seed(policy_seed)
 
-    def uniform_actions() -> torch.Tensor:
+    def uniform_actions(_observation: torch.Tensor) -> torch.Tensor:
         unit = torch.rand((env.num_envs, env.action_dim), generator=generator, device=env.device) * 2.0 - 1.0
         return unit * env.action_clip
 
@@ -228,3 +228,34 @@ def test_two_evals_of_one_policy_give_identical_trajectories(eval_env: BaseEnv) 
     second, _ = _rollout(eval_env, POLICY_SEED)
     for field in fields(Trajectory):
         np.testing.assert_array_equal(getattr(first, field.name), getattr(second, field.name), err_msg=field.name)
+
+
+@pytest.mark.sim
+def test_the_policy_gets_the_observation_the_last_reset_or_step_returned(
+    eval_env: BaseEnv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    returned: list[torch.Tensor] = []
+    received: list[torch.Tensor] = []
+    env_reset = cast(EnvReset, eval_env.reset)
+    env_step = cast(EnvStep, eval_env.step)
+
+    def recording_reset() -> Any:
+        observations, info = env_reset()
+        returned.append(observations["policy"].clone())
+        return observations, info
+
+    def recording_step(actions: torch.Tensor) -> Any:
+        observations, *rest = env_step(actions)
+        returned.append(observations["policy"].clone())
+        return observations, *rest
+
+    def zero_actions(observation: torch.Tensor) -> torch.Tensor:
+        received.append(observation.clone())
+        return torch.zeros((eval_env.num_envs, eval_env.action_dim), device=eval_env.device)
+
+    monkeypatch.setattr(eval_env, "reset", recording_reset)
+    monkeypatch.setattr(eval_env, "step", recording_step)
+    rollout_episode(eval_env, zero_actions, HAND, CLIP, spec_hash="", dexmachina_sha="")
+    assert len(received) == len(returned) - 1
+    for step, (observation, expected) in enumerate(zip(received, returned)):
+        torch.testing.assert_close(observation, expected, msg=f"step {step}")

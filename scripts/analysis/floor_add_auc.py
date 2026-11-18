@@ -111,13 +111,17 @@ def build_env(hand: str, clip: str, seed: int) -> Any:
     return make_eval_env(spec, CPU)
 
 
-def action_source(policy: Policy, env: Any, seed: int) -> Callable[[], torch.Tensor]:
+def action_source(policy: Policy, env: Any, seed: int) -> Callable[[torch.Tensor], torch.Tensor]:
     """The policy's action for every next step; the uniform policy draws from a generator seeded with `seed`."""
     shape = (env.num_envs, env.action_dim)
     if policy is Policy.ZERO:
-        return lambda: torch.zeros(shape, device=env.device)
+        return lambda _observation: torch.zeros(shape, device=env.device)
     generator = torch.Generator(device=env.device).manual_seed(seed)
-    return lambda: (torch.rand(shape, generator=generator, device=env.device) * 2.0 - 1.0) * env.action_clip
+
+    def uniform(_observation: torch.Tensor) -> torch.Tensor:
+        return (torch.rand(shape, generator=generator, device=env.device) * 2.0 - 1.0) * env.action_clip
+
+    return uniform
 
 
 def run_episode(env: Any, policy: Policy, seed: int, hand: str, clip: str) -> EvalScore:
