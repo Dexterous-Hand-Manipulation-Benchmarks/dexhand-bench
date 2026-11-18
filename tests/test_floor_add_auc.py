@@ -94,9 +94,15 @@ HAND = "allegro_hand"
 CLIP = floor.BENCHMARK_CLIPS[0]
 SEED = 0
 OLD_PROTOCOL_NUM_ENVS = 2
-# The floor and the old protocol should agree to this (design: same physics, only the env count and the assist
-# gains differ); a difference above it must be traced to a named cause.
-FLOOR_PROTOCOL_TOLERANCE = 1e-4
+# The floor and the old protocol run the same physics (only the env count and the assist gains differ), but the
+# result differs between CI runners with identical packages: on one runner 3 (frame, threshold) decisions of the
+# falling box flipped (0.11 vs 0.1090625, exactly 3 of the steps below), on another runner and on the Mac none did.
+# The smallest step of the old protocol's AUC, one flip at an end threshold:
+ONE_THRESHOLD_FLIP = 1 / 3200
+# A few flips are runner noise. A real protocol difference moves many more: leaving the assist gains on moved the old
+# protocol by about 25 flips (0.10875 to 0.1167 on the Mac). Above this, find a named cause.
+THRESHOLD_FLIPS_ALLOWED = 5
+FLOOR_PROTOCOL_TOLERANCE = THRESHOLD_FLIPS_ALLOWED * ONE_THRESHOLD_FLIP
 
 
 def _old_protocol_auc(num_envs: int) -> float:
