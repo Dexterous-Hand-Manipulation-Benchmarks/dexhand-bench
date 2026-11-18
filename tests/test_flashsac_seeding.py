@@ -78,7 +78,6 @@ def test_same_seed_gives_the_same_initial_weights_and_warmup_actions(train):
     np.testing.assert_array_equal(action_a, action_b)
 
 
-
 # Enough steps that two envs with independent Zeta repeat lengths resample on the same steps only by vanishing chance.
 NOISE_STEPS = 50
 
@@ -113,6 +112,7 @@ def test_envs_resample_their_exploration_noise_on_different_steps(train):
     agent.sample_actions(0, prev_transition=transition, training=True)
     resampled = []
     for step in range(1, NOISE_STEPS):
+        # The actions mix noise with the actor's output; only the cached noise shows when an env resampled.
         previous_noise = agent._cached_noise.clone()
         agent.sample_actions(step, prev_transition=transition, training=True)
         resampled.append((agent._cached_noise != previous_noise).any(dim=-1).numpy())
