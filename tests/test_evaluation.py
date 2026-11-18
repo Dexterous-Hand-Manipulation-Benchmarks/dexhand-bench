@@ -11,6 +11,7 @@ pytest.importorskip("dexmachina.envs.evaluation", reason="needs genesis and dexm
 from dexmachina.envs.add_metric import ADD_PARTS, ADDMetric  # noqa: E402  (after the skip: needs dexmachina)
 from dexmachina.envs.evaluation import (  # noqa: E402
     NEVER_NAN,
+    PART_AGGREGATIONS,
     EvalRecorder,
     StepRecord,
     Trajectory,
@@ -51,6 +52,32 @@ def test_an_add_exactly_on_a_threshold_is_a_miss_at_that_threshold() -> None:
     result = score(_trajectory(_constant_add(0.02, 0.02)))
     assert result.auc_add == pytest.approx(0.8125)
     assert result.success_2cm == 0.0
+
+
+def test_the_part_aggregations_summarise_the_per_part_aucs() -> None:
+    # Top at 1.5 cm gives 0.9375, bottom at 2 cm gives 0.8125 (the two tests above).
+    result = score(_trajectory(_constant_add(0.015, 0.02)), part_aggregations=PART_AGGREGATIONS)
+    assert result.auc_add_aggregated == pytest.approx({"median": 0.875, "min": 0.8125, "max": 0.9375, "std": 0.0625})
+    assert result.auc_add == pytest.approx(0.875)
+
+
+def test_the_preset_part_aggregations_on_three_parts() -> None:
+    # Three values, so the median differs from the mean (with the two ADD parts they coincide).
+    auc_by_part = {"a": 0.1, "b": 0.2, "c": 0.6}
+    aggregated = {name: aggregate(auc_by_part) for name, aggregate in PART_AGGREGATIONS.items()}
+    assert aggregated == pytest.approx({"median": 0.2, "min": 0.1, "max": 0.6, "std": (14 / 300) ** 0.5})
+
+
+def test_a_custom_part_aggregation_gets_the_auc_of_each_part_by_name() -> None:
+    result = score(
+        _trajectory(_constant_add(0.015, 0.02)),
+        part_aggregations={"top_minus_bottom": lambda auc: auc["top"] - auc["bottom"]},
+    )
+    assert result.auc_add_aggregated == pytest.approx({"top_minus_bottom": 0.125})
+
+
+def test_without_part_aggregations_there_are_no_aggregated_values() -> None:
+    assert score(_trajectory(_constant_add(0.015, 0.02))).auc_add_aggregated == {}
 
 
 def test_frames_from_the_first_nan_step_are_misses() -> None:
