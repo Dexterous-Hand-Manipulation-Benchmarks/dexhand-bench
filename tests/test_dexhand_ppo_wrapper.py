@@ -5,8 +5,8 @@ import torch
 from fakes import FakeDexEnv
 
 dex = pytest.importorskip("dexhand_ppo.envs.dexmachina", reason="needs the dexhand-ppo extra")
-from omegaconf import OmegaConf  # noqa: E402
 from dexhand_ppo.config import Config  # noqa: E402
+from omegaconf import OmegaConf  # noqa: E402
 
 NUM_ENVS, EPISODE_LENGTH, NUM_STEPS, EMAX = 2, 3, 4, 100
 ITERATIONS = 10

@@ -7,8 +7,8 @@ import pytest
 
 pytestmark = pytest.mark.sim
 dex = pytest.importorskip("dexhand_ppo.envs.dexmachina", reason="needs the dexhand-ppo extra")
-from omegaconf import OmegaConf  # noqa: E402
 from dexhand_ppo.config import Config  # noqa: E402
+from omegaconf import OmegaConf  # noqa: E402
 
 PROTOCOL = Path(dex.__file__).parents[1] / "configs" / "env" / "dexmachina.yaml"
 
