@@ -1,6 +1,7 @@
 """The eval scorer (synthetic ADD values) and recorder (hand-made step records); no simulator, no env."""
 
 from dataclasses import fields, replace
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -15,7 +16,9 @@ from dexmachina.envs.evaluation import (  # noqa: E402
     EvalRecorder,
     StepRecord,
     Trajectory,
+    load_trajectory,
     paired_demo_frame,
+    save_trajectory,
     score,
 )
 
@@ -274,3 +277,30 @@ def test_the_recorder_stores_copies_of_the_env_buffers() -> None:
 def test_a_record_with_the_wrong_number_of_envs_raises() -> None:
     with pytest.raises(ValueError, match=r"object_root_pos has 2 rows, expected one per env \(1\)"):
         _recorder().record(_step(0, num_envs=1, object_root_pos=np.zeros((2, 3))))
+
+
+def test_a_saved_trajectory_loads_back_equal_and_scores_the_same(tmp_path: Path) -> None:
+    trajectory = _trajectory(_constant_add(0.015, 0.03, steps=4), nan_from=[2])
+    path = tmp_path / "trajectory.npz"
+    save_trajectory(path, trajectory)
+    loaded = load_trajectory(path)
+    for field in fields(Trajectory):
+        np.testing.assert_array_equal(getattr(loaded, field.name), getattr(trajectory, field.name), err_msg=field.name)
+    assert (loaded.hand, loaded.clip, loaded.spec_hash, loaded.dexmachina_sha) == ("h", "c", "s", "d")
+    assert type(loaded.hand) is str
+    assert score(loaded) == score(trajectory)
+
+
+def test_a_file_that_is_not_a_trajectory_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "other.npz"
+    np.savez(path, add=np.zeros(3))
+    with pytest.raises(ValueError, match="not a saved Trajectory"):
+        load_trajectory(path)
+
+
+def test_a_saved_trajectory_is_never_overwritten(tmp_path: Path) -> None:
+    path = tmp_path / "trajectory.npz"
+    save_trajectory(path, _trajectory(_constant_add(0.01, 0.01, steps=2)))
+    with pytest.raises(FileExistsError, match="exists already"):
+        save_trajectory(path, _trajectory(_constant_add(0.05, 0.05, steps=2)))
+    assert load_trajectory(path).add.max() == 0.01

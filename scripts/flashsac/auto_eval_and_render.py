@@ -98,7 +98,7 @@ def main():
             print(f"  -> [EVAL] Evaluating and Rendering Step {step_num}...")
 
             cmd = [
-                sys.executable, EVAL_SCRIPT,
+                sys.executable, EVAL_SCRIPT, "--old-protocol",
                 "--config_path", CONFIG_DIR,
                 "--checkpoint_path", step_path,
                 "--wandb_run_id", run.id,

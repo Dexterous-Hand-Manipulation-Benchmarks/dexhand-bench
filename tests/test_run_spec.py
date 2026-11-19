@@ -102,3 +102,15 @@ def test_a_file_with_a_wrongly_typed_commit_record_is_refused(tmp_path: Path, ke
     path.write_text(json.dumps(content))
     with pytest.raises(ValueError, match="must be a string and a boolean"):
         run_spec.load_run_spec(tmp_path)
+
+
+def test_current_state_is_the_commit_and_dirty_flag_that_save_run_spec_records(
+    tmp_path: Path, fake_dexmachina: Path
+) -> None:
+    clean = run_spec.current_dexmachina_state()
+    assert clean == run_spec.DexmachinaState(_git(fake_dexmachina, "rev-parse", "HEAD"), False)
+    (fake_dexmachina / "file.py").write_text("x = 2\n")
+    assert run_spec.current_dexmachina_state().dirty
+    run_spec.save_run_spec(tmp_path, SPEC, {})
+    saved = run_spec.load_run_spec(tmp_path)
+    assert run_spec.current_dexmachina_state() == (saved.dexmachina_sha, saved.dexmachina_dirty)

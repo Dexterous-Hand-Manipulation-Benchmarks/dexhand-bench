@@ -24,6 +24,7 @@ for STEP_DIR in $(find "$LATEST_RUN_DIR" -maxdepth 1 -type d -name "step*" | sor
     STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
     echo "Rendering $STEP_DIR..."
     python eval_dexmachina.py \
+        --old-protocol \
         --config_path "configs" \
         --checkpoint_path "${STEP_DIR}" \
         --step "${STEP_NUM}" \
