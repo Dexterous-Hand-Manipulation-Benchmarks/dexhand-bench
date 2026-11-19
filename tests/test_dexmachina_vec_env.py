@@ -15,6 +15,7 @@ import pytest
 import torch
 
 pytest.importorskip("dexmachina.envs.base_env", reason="needs genesis and dexmachina")
+import dexmachina.envs.vec_env as vec_env_module  # noqa: E402
 from dexmachina.envs.base_env import BaseEnv  # noqa: E402  (after the skip: needs dexmachina)
 from dexmachina.envs.maniptrans_curr import ManipTransCurriculum  # noqa: E402
 from dexmachina.envs.spec import EnvSpec  # noqa: E402
@@ -389,6 +390,15 @@ def test_autoreset_mode_matches_gymnasium_when_it_has_the_enum() -> None:
     if not hasattr(vector, "AutoresetMode"):
         pytest.skip("gymnasium < 1.0 has no AutoresetMode")
     assert vector.AutoresetMode(AUTORESET_SAME_STEP) is vector.AutoresetMode.SAME_STEP
+
+
+def test_from_spec_keeps_the_spec_and_reward_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vec_env_module, "make_env", lambda spec, device, reward_overrides: FakeBaseEnv())
+    spec, overrides = replace(EnvSpec(), use_rl_games=True, hand="allegro_hand"), {"force_penalty": 0.1}
+    vec = DexMachinaVecEnv.from_spec(spec, "cpu", overrides)
+    assert (vec.spec, vec.reward_overrides) == (spec, overrides)
+    overrides["force_penalty"] = 9.9
+    assert vec.reward_overrides == {"force_penalty": 0.1}
 
 
 GOLDEN_REWARD_OVERRIDES = {"force_penalty": 0.1, "task_rew_weight": 1.0, "bc_wrist_weight": 0.25}
