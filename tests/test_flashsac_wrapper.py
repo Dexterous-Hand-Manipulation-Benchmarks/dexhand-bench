@@ -156,6 +156,12 @@ def test_dexmachina_spec_translates_the_hydra_kwargs():
     assert reward_overrides == {"force_penalty": 0.1}
 
 
+def test_dexmachina_spec_refuses_a_clip_that_is_not_a_clip_id():
+    kwargs = flashsac_env_kwargs({"hand": "allegro_hand", "clip": "bowl-30"})
+    with pytest.raises(ValueError, match="'bowl-30' is not a dexmachina clip id"):
+        flash_dex.dexmachina_spec(8, kwargs, 7, "dexmachina/allegro_hand")
+
+
 @pytest.mark.parametrize("missing", ["spec", "reward_overrides"])
 def test_wrapper_without_a_spec_refuses_to_report_one(missing):
     from dexmachina.envs.spec import EnvSpec
