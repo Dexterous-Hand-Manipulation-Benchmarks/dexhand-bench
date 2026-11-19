@@ -29,7 +29,8 @@ DEVICE = "cpu"
 NEUTRAL_ENV_NAME = "dexmachina/allegro_hand"
 DEFAULT_CLIP_SUFFIX = "s01-01"
 FLASHSAC_FALLBACK_CLIP = "box-30-230-s01-01"
-FLASHSAC_YAML_DEFAULT_CLIP = "s01_ketchup_01"  # `clip` in FlashSAC configs/env/dexmachina.yaml
+# FlashSAC's old default `clip`, which was silently replaced by the box clip.
+FLASHSAC_UNPARSEABLE_CLIP = "s01_ketchup_01"
 
 
 def _golden_meta(name):
@@ -166,11 +167,9 @@ def test_flashsac_keeps_other_clip_ranges(requested, monkeypatch):
     assert _flashsac_clip_for(requested, monkeypatch) == f"{requested}-{DEFAULT_CLIP_SUFFIX}"
 
 
-@pytest.mark.xfail(strict=True, raises=pytest.fail.Exception,
-                   reason=f"known issue #3: unparseable clips silently become {FLASHSAC_FALLBACK_CLIP}")
 def test_flashsac_rejects_unparseable_clip(monkeypatch):
-    with pytest.raises(ValueError):
-        _flashsac_clip_for(FLASHSAC_YAML_DEFAULT_CLIP, monkeypatch)
+    with pytest.raises(ValueError, match="is not a dexmachina clip id"):
+        _flashsac_clip_for(FLASHSAC_UNPARSEABLE_CLIP, monkeypatch)
 
 
 def _flashsac_error_for(overrides, monkeypatch):
