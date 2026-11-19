@@ -3,6 +3,16 @@
 The headline (per-clip and pooled mean with a Student-t interval) is the only part used to rank methods. Insights
 (median, IQR, std, custom functions) are computed separately and recorded under their names, for tracking only.
 
+Why an interval and not mean +- std: the std describes how much single seeds vary and does not shrink with more
+seeds. The interval mean +- t * s / sqrt(n) says where the true mean (over infinitely many seeds) probably lies, and
+narrows as seeds are added, which is what a comparison of methods needs. It uses Student's t instead of the normal
+1.96 because s is itself estimated from few seeds; t widens the interval to cover that (4.30 for 3 seeds).
+
+The pooled mean is the mean of the clip means, so its variance is the sum of the clips' variances of the mean divided
+by K^2. Its degrees of freedom (how much data the spread estimate rests on, which sets t) come from the
+Welch-Satterthwaite formula: about the sum of the clips' n - 1 when the clips contribute equally, down to one clip's
+n - 1 when that clip dominates the variance.
+
 Reading the intervals:
 - The per-clip intervals are descriptive. With few seeds and values near 0 or 1 they cover the true mean far less
   often than 95 % of the time. Only the pooled interval is meant for ranking.
