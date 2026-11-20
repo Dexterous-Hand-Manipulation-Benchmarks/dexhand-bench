@@ -2,7 +2,7 @@
 
 import importlib.util
 import sys
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +15,10 @@ from conftest import isolate_hand_cfgs
 pytest.importorskip("dexmachina.eval.compute_add", reason="needs genesis and dexmachina")
 from dexmachina.envs.add_metric import ADD_AUC_THRESHOLDS, ADD_PARTS  # noqa: E402  (after the skip: needs dexmachina)
 from dexmachina.envs.benchmark_task import RunChoices, benchmark_spec  # noqa: E402
-from dexmachina.envs.evaluation import ADD_LOG_KEY  # noqa: E402
+from dexmachina.envs.evaluation import ADD_LOG_KEY, NOT_STORED, rollout_episode, zero_action_floor  # noqa: E402
 from dexmachina.envs.factory import make_env  # noqa: E402
 from dexmachina.eval.compute_add import compute_add_stats  # noqa: E402
+from genesis.utils import set_random_seed  # noqa: E402
 
 SCRIPT = Path(__file__).parents[1] / "scripts/analysis/floor_add_auc.py"
 spec = importlib.util.spec_from_file_location("floor_add_auc", SCRIPT)
@@ -143,6 +144,41 @@ def test_the_floor_on_the_eval_env_matches_the_old_floor_protocol(
     assert floor_score.auc_add == pytest.approx(old, abs=FLOOR_PROTOCOL_TOLERANCE)
     # The hand lets the box fall with a zero action; the record of that is the adapter's dropped flag.
     assert floor_score.drop_rate == 1.0
+
+
+MEASURED_FLOOR_AUC = 0.10875
+
+
+@pytest.mark.sim
+def test_the_shared_floor_helper_gives_the_measured_floor(genesis_cpu: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    isolate_hand_cfgs(monkeypatch)
+    env = floor.build_env(HAND, CLIP, SEED)
+    assert zero_action_floor(env, HAND, CLIP).auc_add == pytest.approx(MEASURED_FLOOR_AUC, abs=FLOOR_PROTOCOL_TOLERANCE)
+
+
+def _observation_dependent_trajectory(env: Any, floor_first: bool) -> Any:
+    set_random_seed(SEED)
+    if floor_first:
+        zero_action_floor(env, HAND, CLIP)
+
+    def act(observation: torch.Tensor) -> torch.Tensor:
+        return torch.tanh(observation[:, : env.action_dim]) * env.action_clip
+
+    return rollout_episode(env, act, HAND, CLIP, spec_hash=NOT_STORED, dexmachina_sha=NOT_STORED)
+
+
+@pytest.mark.sim
+def test_running_the_floor_first_does_not_change_the_episode_after_it(
+    genesis_cpu: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    isolate_hand_cfgs(monkeypatch)
+    pristine_cfgs = floor.snapshot_hand_cfgs()
+    alone = _observation_dependent_trajectory(floor.build_env(HAND, CLIP, SEED), floor_first=False)
+    floor.restore_hand_cfgs(pristine_cfgs)
+    after_floor = _observation_dependent_trajectory(floor.build_env(HAND, CLIP, SEED), floor_first=True)
+    for field in fields(alone):
+        np.testing.assert_array_equal(getattr(after_floor, field.name), getattr(alone, field.name), err_msg=field.name)
+    assert np.ptp(alone.add) > 0  # the actions moved the object: equal trajectories are not both constant
 
 
 @pytest.mark.sim

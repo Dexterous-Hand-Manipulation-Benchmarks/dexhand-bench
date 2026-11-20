@@ -1,9 +1,9 @@
 """FlashSAC's benchmark evaluation: it rebuilds agent and env from what the run saved, and refuses what disagrees."""
 import ast
 import importlib.util
-import json
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -23,15 +23,13 @@ from dexmachina.envs.evaluation import (  # noqa: E402  (after the skip: needs d
     load_trajectory,
     score,
 )
-from dexmachina.envs.factory import task_hash  # noqa: E402
-from dexmachina.envs.run_spec import DexmachinaState, current_dexmachina_state, load_run_spec  # noqa: E402
+from dexmachina.envs.run_spec import DexmachinaState, current_dexmachina_state  # noqa: E402
 
 FLASHSAC_DIR = Path(__file__).parents[1] / "algorithms/FlashSAC"
 CONFIG_DIR = str(FLASHSAC_DIR / "configs")
 GOLDEN = "flashsac_allegro_box"
 CPU = "cpu"
 STEP_DIRNAME = "step1"
-FLOOR_AUC_ADD = 0.25
 # What the training run's Hydra config turns into on the CPU: no AMP, a tiny unused replay buffer.
 CPU_AGENT_OVERRIDES = [
     "agent.use_amp=false",
@@ -89,22 +87,6 @@ def _save_run(run_dir: Path, normalize_observation: bool = True, use_compile: bo
     return run_dir / STEP_DIRNAME, agent
 
 
-def _floor_content(run_dir: Path, sha: str, **changes: Any) -> dict[str, Any]:
-    spec = load_run_spec(run_dir).spec
-    content = {
-        "hand": spec.hand, "clip": spec.clip, "task_hash": task_hash(spec), "dexmachina_sha": sha,
-        "dexmachina_dirty": False, "policy": "zero", "device": CPU,
-        "per_seed_auc_add": [FLOOR_AUC_ADD] * 3, "auc_add": FLOOR_AUC_ADD,
-    }  # fmt: skip
-    return {**content, **changes}
-
-
-def _write_floor(run_dir: Path, sha: str, **changes: Any) -> None:
-    content = _floor_content(run_dir, sha, **changes)
-    name = eval_dexmachina.FLOOR_FILENAME.format(task_hash=task_hash(load_run_spec(run_dir).spec), sha=sha)
-    (run_dir / name).write_text(json.dumps(content))
-
-
 def _emitted_by_the_training_eval() -> set[str]:
     """Every string constant in flash_rl/evaluation.py: the metric names the in-training eval can log."""
     tree = ast.parse((FLASHSAC_DIR / "flash_rl/evaluation.py").read_text())
@@ -115,7 +97,6 @@ def _emitted_by_the_training_eval() -> set[str]:
 def test_a_fresh_agent_is_scored_on_the_saved_spec(genesis_cpu, isolated_hand_cfgs, tmp_path):
     step_dir, _ = _save_run(tmp_path)
     sha = current_dexmachina_state().sha
-    _write_floor(tmp_path, sha)
 
     evaluation = eval_dexmachina.evaluate_benchmark(step_dir, CPU)
 
@@ -127,7 +108,8 @@ def test_a_fresh_agent_is_scored_on_the_saved_spec(genesis_cpu, isolated_hand_cf
     assert set(metrics) == {f"{PREFIX}/{name}" for name in expected}
     assert all(math.isfinite(value) for value in metrics.values()), metrics
     assert 0.0 <= evaluation.eval_score.auc_add <= 1.0
-    assert metrics[f"{PREFIX}/floor/auc_add"] == FLOOR_AUC_ADD
+    assert metrics[f"{PREFIX}/floor/auc_add"] == evaluation.floor.auc_add
+    assert 0.0 <= evaluation.floor.auc_add <= 1.0
     assert (metrics[f"{PREFIX}/checkpoint_step"], metrics[f"{PREFIX}/env_step"]) == (1.0, float(TRAIN_NUM_ENVS))
     assert evaluation.evaluated_state == DexmachinaState(sha, current_dexmachina_state().dirty)
     short_sha = sha[: eval_dexmachina.SHORT_SHA_LENGTH]
@@ -143,7 +125,7 @@ def _stub_evaluation() -> Any:
     )  # fmt: skip
     return eval_dexmachina.BenchmarkEvaluation(
         eval_score=result, task_hash="t", saved_state=DexmachinaState("a", False),
-        evaluated_state=DexmachinaState("a", False), floor=eval_dexmachina.Floor(0.1, CPU),
+        evaluated_state=DexmachinaState("a", False), floor=replace(result, auc_add=0.1),
         checkpoint_step=1, env_step=1,
     )
 
@@ -154,7 +136,6 @@ def test_the_logged_keys_stay_clear_of_the_ones_the_training_eval_logs():
     emitted = _emitted_by_the_training_eval()
     assert "eval/success_2cm" in emitted  # the derivation sees what it should avoid
     assert keys.isdisjoint(emitted)
-    assert evaluation.provenance()[f"{PREFIX}/floor_device"] == "cpu"
     assert all(key.startswith(f"{PREFIX}/") for key in keys)
 
 
@@ -165,12 +146,6 @@ def test_a_run_without_env_spec_json_points_at_the_old_protocol(tmp_path):
         eval_dexmachina.evaluate_benchmark(step_dir, CPU)
 
 
-def test_a_missing_floor_is_an_error(tmp_path):
-    step_dir, _ = _save_run(tmp_path)
-    with pytest.raises(FileNotFoundError, match="floor"):
-        eval_dexmachina.evaluate_benchmark(step_dir, CPU)
-
-
 def test_a_different_dexmachina_commit_is_warned_about(tmp_path, monkeypatch, capsys):
     step_dir, _ = _save_run(tmp_path)
     saved_state = current_dexmachina_state()
@@ -178,7 +153,8 @@ def test_a_different_dexmachina_commit_is_warned_about(tmp_path, monkeypatch, ca
     monkeypatch.setattr(
         eval_dexmachina, "current_dexmachina_state", lambda: DexmachinaState(other_commit, saved_state.dirty)
     )
-    with pytest.raises(FileNotFoundError, match="floor"):  # the evaluation stops at the missing floor of that commit
+    monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: pytest.fail("built the env"))
+    with pytest.raises(pytest.fail.Exception, match="built the env"):  # the warning comes before the env is built
         eval_dexmachina.evaluate_benchmark(step_dir, CPU)
     assert f"evaluated with {other_commit[:12]}" in capsys.readouterr().out
 
@@ -249,56 +225,6 @@ def test_asymmetric_observations_are_refused(tmp_path):
         eval_dexmachina.build_eval_agent(config.agent, 4, 2, 1.0, CPU)
 
 
-FLOOR_SHA = "ab" * 20
-FLOOR_TASK = "0123456789ab"
-FLOOR = {
-    "hand": "allegro_hand", "clip": "box", "task_hash": FLOOR_TASK, "dexmachina_sha": FLOOR_SHA,
-    "dexmachina_dirty": False, "policy": "zero", "device": CPU, "per_seed_auc_add": [0.25, 0.25], "auc_add": 0.25,
-}  # fmt: skip
-
-
-def _read_floor(tmp_path: Path, content: Any) -> Any:
-    name = eval_dexmachina.FLOOR_FILENAME.format(task_hash=FLOOR_TASK, sha=FLOOR_SHA)
-    (tmp_path / name).write_text(json.dumps(content))
-    evaluated = DexmachinaState(FLOOR_SHA, True)
-    return eval_dexmachina.read_floor(tmp_path, "allegro_hand", "box", FLOOR_TASK, evaluated)
-
-
-def test_a_valid_floor_is_read(tmp_path):
-    assert _read_floor(tmp_path, FLOOR) == eval_dexmachina.Floor(auc_add=0.25, device=CPU)
-
-
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"hand": "inspire_hand"},
-        {"clip": "mixer"},
-        {"task_hash": "ffffffffffff"},
-        {"dexmachina_sha": "cd" * 20},
-        {"dexmachina_dirty": True},
-        {"policy": "uniform"},
-        {"per_seed_auc_add": [0.25, 0.26]},
-        {"per_seed_auc_add": []},
-        {"per_seed_auc_add": "0.25"},
-        {"auc_add": 0.3},
-        {"auc_add": True, "per_seed_auc_add": [True, True]},
-        {"auc_add": float("nan"), "per_seed_auc_add": [float("nan")] * 2},
-        {"auc_add": float("inf"), "per_seed_auc_add": [float("inf")] * 2},
-        {"auc_add": "0.25"},
-    ],
-    ids=lambda changes: ",".join(changes),
-)
-def test_a_floor_that_is_not_this_evaluations_zero_floor_is_refused(tmp_path, changes):
-    with pytest.raises(ValueError):
-        _read_floor(tmp_path, {**FLOOR, **changes})
-
-
-@pytest.mark.parametrize("content", [[0.25], {k: v for k, v in FLOOR.items() if k != "device"}, {**FLOOR, "extra": 1}])
-def test_a_floor_without_exactly_the_floor_keys_is_refused(tmp_path, content):
-    with pytest.raises(ValueError, match="exactly the keys"):
-        _read_floor(tmp_path, content)
-
-
 def test_main_runs_the_protocol_the_flag_names(monkeypatch):
     called: list[str] = []
     monkeypatch.setattr(eval_dexmachina, "run_old_protocol", lambda args: called.append("old"))
@@ -333,4 +259,4 @@ def test_the_benchmark_metrics_are_plotted_against_the_env_step(monkeypatch):
     kinds = [kind for kind, _ in calls]
     assert kinds == ["define_metric", "log", "summary"]  # defined before the first log
     assert calls[0][1] == (f"{PREFIX}/*", {"step_metric": f"{PREFIX}/env_step"})
-    assert f"{PREFIX}/floor_device" in calls[2][1]
+    assert f"{PREFIX}/task_hash" in calls[2][1]

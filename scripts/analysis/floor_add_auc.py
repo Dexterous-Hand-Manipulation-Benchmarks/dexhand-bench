@@ -47,9 +47,11 @@ from dexmachina.envs.benchmark_task import (  # pyright: ignore[reportMissingTyp
     benchmark_spec,
 )
 from dexmachina.envs.evaluation import (  # pyright: ignore[reportMissingTypeStubs]
+    NOT_STORED,
     EvalScore,
     rollout_episode,
     score,
+    zero_action_floor,
 )
 from dexmachina.envs.factory import make_eval_env  # pyright: ignore[reportMissingTypeStubs]
 from genesis.utils import set_random_seed  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
@@ -61,8 +63,6 @@ CPU = "cpu"
 HAND_CFG_SUFFIX = "_CFGS"
 RUNS_CSV = "floor_runs.csv"
 SUMMARY_MD = "floor_summary.md"
-# The floor is scored in memory and never stored, so its trajectories carry no spec hash or SHA.
-NOT_STORED = ""
 
 
 class Policy(str, Enum):
@@ -111,11 +111,9 @@ def build_env(hand: str, clip: str, seed: int) -> Any:
     return make_eval_env(spec, CPU)
 
 
-def action_source(policy: Policy, env: Any, seed: int) -> Callable[[torch.Tensor], torch.Tensor]:
-    """The policy's action for every next step; the uniform policy draws from a generator seeded with `seed`."""
+def uniform_actions(env: Any, seed: int) -> Callable[[torch.Tensor], torch.Tensor]:
+    """Actions drawn uniformly within the env's bounds from a generator seeded with `seed`."""
     shape = (env.num_envs, env.action_dim)
-    if policy is Policy.ZERO:
-        return lambda _observation: torch.zeros(shape, device=env.device)
     generator = torch.Generator(device=env.device).manual_seed(seed)
 
     def uniform(_observation: torch.Tensor) -> torch.Tensor:
@@ -125,8 +123,10 @@ def action_source(policy: Policy, env: Any, seed: int) -> Callable[[torch.Tensor
 
 
 def run_episode(env: Any, policy: Policy, seed: int, hand: str, clip: str) -> EvalScore:
+    if policy is Policy.ZERO:
+        return zero_action_floor(env, hand, clip)
     trajectory = rollout_episode(
-        env, action_source(policy, env, seed), hand, clip, spec_hash=NOT_STORED, dexmachina_sha=NOT_STORED
+        env, uniform_actions(env, seed), hand, clip, spec_hash=NOT_STORED, dexmachina_sha=NOT_STORED
     )
     return score(trajectory)
 
