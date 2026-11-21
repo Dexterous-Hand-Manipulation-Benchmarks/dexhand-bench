@@ -7,6 +7,9 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    env:
+      # jaxlib (reppo extra) needs an executable stack, which current glibc refuses unless allowed
+      GLIBC_TUNABLES: ${{ matrix.extra == 'reppo' && 'glibc.rtld.execstack=2' || '' }}
     strategy:
       fail-fast: false
       matrix:
