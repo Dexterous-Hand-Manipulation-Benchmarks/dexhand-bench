@@ -95,7 +95,6 @@ for seed in "${seeds[@]}"; do
                 ++env.reward_cfg.obj_arti_beta=5.0 \
                 ++env.curriculum=true \
                 ++use_rl_games=true \
-                ++hyperparameters.actor_min_std=0.05 \
 
 
 #           hyperparameters.total_time_steps=50_000_896 \
