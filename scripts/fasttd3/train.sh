@@ -46,7 +46,7 @@ for seed in "${seeds[@]}"; do
 
             run_exp_name="${hand}_${clip}_seed${seed}"
             NUM_TRAIN_ENVS=2048
-            TOTAL_TIMESTEPS=$((5000000 / NUM_TRAIN_ENVS)) #65104
+            TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) #65104
             MAX_EPOCHS=10000
             SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 2))
             RENDER_INTERVAL=$((TOTAL_TIMESTEPS / 4))
