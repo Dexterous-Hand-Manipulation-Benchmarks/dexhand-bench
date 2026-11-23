@@ -161,6 +161,10 @@ def test_the_logged_keys_stay_clear_of_the_ones_the_training_eval_logs():
     assert all(key.startswith(f"{PREFIX}/") for key in keys)
 
 
+def _stop_before_the_env(monkeypatch):
+    monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: pytest.fail("built the env"))
+
+
 def test_a_run_without_env_spec_json_points_at_the_old_protocol(tmp_path):
     step_dir, _ = _save_run(tmp_path)
     (tmp_path / "env_spec.json").unlink()
@@ -178,10 +182,6 @@ def test_a_different_dexmachina_commit_is_warned_about(tmp_path, monkeypatch, cl
     with pytest.raises(pytest.fail.Exception, match="built the env"):  # the warning comes before the env is built
         eval_dexmachina.evaluate_benchmark(step_dir, CPU)
     assert f"evaluated with {other_commit[:12]}" in capsys.readouterr().out
-
-
-def _stop_before_the_env(monkeypatch):
-    monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: pytest.fail("built the env"))
 
 
 def test_a_dirty_dexmachina_at_evaluation_is_refused(tmp_path, monkeypatch, clean_dexmachina):
@@ -333,3 +333,26 @@ def test_the_eval_seed_and_the_dirty_flag_reach_the_evaluation(monkeypatch, flag
     monkeypatch.setattr(eval_dexmachina, "evaluate_benchmark", fake_evaluate)
     eval_dexmachina.main(["--checkpoint_path", "step1", "--device", CPU, *flags])
     assert passed == expected
+
+
+def test_the_eval_seed_is_set_after_the_env_is_built(tmp_path, monkeypatch):
+    step_dir, _ = _save_run(tmp_path)
+    calls: list[str] = []
+
+    def stop_after_seeding(seed):
+        calls.append(f"seed {seed}")
+        raise _Stop
+
+    class _Stop(Exception):
+        pass
+
+    monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: calls.append("env"))
+    monkeypatch.setattr(eval_dexmachina, "set_random_seed", stop_after_seeding)
+    with pytest.raises(_Stop):
+        eval_dexmachina.evaluate_benchmark(step_dir, CPU, eval_seed=7)
+    assert calls == ["env", "seed 7"]
+
+
+def test_benchmark_arguments_are_refused_with_the_old_protocol():
+    with pytest.raises(SystemExit, match="--eval-seed only apply to the default evaluation"):
+        eval_dexmachina.main(["--checkpoint_path", "step1", "--old-protocol", "--eval-seed", "3"])
