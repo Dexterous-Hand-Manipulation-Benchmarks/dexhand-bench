@@ -1,4 +1,4 @@
-"""Summaries of one metric of one method over seeds and clips.
+"""Summaries of one metric of one method over seeds and clips, and the comparison of two methods.
 
 The headline (per-clip and pooled mean with a Student-t interval) is the only part used to rank methods. Insights
 (median, IQR, std, custom functions) are computed separately and recorded under their names, for tracking only.
@@ -20,6 +20,12 @@ Reading the intervals:
   changes what is estimated, not only how precisely.
 - Each seed must contribute one value from the same evaluation protocol for every method: final checkpoint, same
   evaluation episodes, same environment config and same step budget.
+
+Comparing two methods: whether their intervals overlap says little (two overlapping 95 % intervals can still differ
+significantly). `compare_methods` gives the difference of the means per clip, with a Welch interval (the seeds of the
+two methods are independent and their spreads may differ), and pooled the mean of those differences over the clips
+both methods have, with Welch-Satterthwaite degrees of freedom over all their variances. Only the pooled difference is
+meant for ranking; an interval that excludes 0 favours one method on this set of clips.
 """
 
 import math
@@ -104,6 +110,13 @@ def _half_width(variance_of_mean: float, degrees_of_freedom: float) -> float:
     return _t_quantile(upper_probability, degrees_of_freedom) * math.sqrt(variance_of_mean)
 
 
+def _welch_satterthwaite(variances: Sequence[float], seed_counts: Sequence[int]) -> float:
+    """Degrees of freedom of a sum of independent variance estimates, each from `seed_count` values."""
+    return sum(variances) ** 2 / sum(
+        variance**2 / (seed_count - 1) for variance, seed_count in zip(variances, seed_counts, strict=True)
+    )
+
+
 def _checked(metric: str, values_by_clip: Mapping[str, Sequence[float]]) -> Mapping[str, npt.NDArray[np.float64]]:
     if not values_by_clip:
         raise ValueError(f"{metric}: no clips given; pass the per-seed values of every clip.")
@@ -146,9 +159,7 @@ def summarize_headline(metric: str, values_by_clip: Mapping[str, Sequence[float]
     degrees_of_freedom: float | None = None
     half_width = 0.0
     if not all(entry.no_spread for entry in per_clip):
-        degrees_of_freedom = pooled_variance**2 / sum(
-            term**2 / (entry.num_seeds - 1) for term, entry in zip(terms, per_clip, strict=True)
-        )
+        degrees_of_freedom = _welch_satterthwaite(terms, [entry.num_seeds for entry in per_clip])
         half_width = _half_width(pooled_variance, degrees_of_freedom)
     pooled = PooledHeadline(
         clips=tuple(entry.clip for entry in per_clip),
@@ -180,3 +191,103 @@ def compute_insights(
     }
     pooled = {name: sum(by_clip.values()) / len(by_clip) for name, by_clip in per_clip.items()}
     return Insights(metric=metric, per_clip=per_clip, pooled=pooled)
+
+
+@dataclass(frozen=True)
+class ClipResults:
+    """One method's per-seed values on one clip, and the task hash of the eval they come from."""
+
+    task_hash: str
+    values: Sequence[float]
+
+
+@dataclass(frozen=True)
+class MethodResults:
+    name: str
+    # Clip -> its results.
+    clips: Mapping[str, ClipResults]
+
+
+@dataclass(frozen=True)
+class ClipDifference:
+    clip: str
+    # Mean of the first method minus mean of the second.
+    interval: MeanInterval
+    # None when neither method has a spread on this clip.
+    degrees_of_freedom: float | None
+
+
+@dataclass(frozen=True)
+class PooledDifference:
+    clips: tuple[str, ...]
+    interval: MeanInterval
+    degrees_of_freedom: float | None
+
+
+@dataclass(frozen=True)
+class Comparison:
+    metric: str
+    methods: tuple[str, str]
+    per_clip: tuple[ClipDifference, ...]
+    pooled: PooledDifference
+    # Clips that only one method has (a diverged or missing run); they are left out of the comparison.
+    clips_only_in: Mapping[str, tuple[str, ...]]
+
+
+def _variance_of_mean(values: npt.NDArray[np.float64]) -> float:
+    return 0.0 if np.ptp(values) == 0 else float(values.var(ddof=1)) / len(values)
+
+
+def _interval(mean: float, variances: Sequence[float], seed_counts: Sequence[int]) -> tuple[MeanInterval, float | None]:
+    """The interval of a mean whose variance is the sum of `variances`; no width when all of them are zero."""
+    if not any(variances):
+        return MeanInterval(mean, mean, mean), None
+    degrees_of_freedom = _welch_satterthwaite(variances, seed_counts)
+    half_width = _half_width(sum(variances), degrees_of_freedom)
+    return MeanInterval(mean, mean - half_width, mean + half_width), degrees_of_freedom
+
+
+def compare_methods(metric: str, first: MethodResults, second: MethodResults) -> Comparison:
+    """`first` minus `second`, per clip and pooled over the clips both have."""
+    name_a, clips_a, name_b, clips_b = first.name, first.clips, second.name, second.clips
+    shared = [clip for clip in clips_a if clip in clips_b]
+    if not shared:
+        raise ValueError(
+            f"{metric}: {name_a} and {name_b} have no clip in common ({sorted(clips_a)} vs {sorted(clips_b)}), so "
+            "there is nothing to compare. Evaluate both methods on the same clips."
+        )
+    differing = [clip for clip in shared if clips_a[clip].task_hash != clips_b[clip].task_hash]
+    if differing:
+        raise ValueError(
+            f"{metric}: {name_a} and {name_b} were evaluated on different tasks for clip(s) {differing} (task hashes "
+            "differ), so their scores measure different things. Evaluate both on the same env config, or compare "
+            "only clips with equal task hashes."
+        )
+    arrays_a = _checked(f"{metric} ({name_a})", {clip: clips_a[clip].values for clip in shared})
+    arrays_b = _checked(f"{metric} ({name_b})", {clip: clips_b[clip].values for clip in shared})
+
+    per_clip: list[ClipDifference] = []
+    pooled_variances: list[float] = []
+    pooled_seed_counts: list[int] = []
+    num_clips = len(shared)
+    for clip in shared:
+        a, b = arrays_a[clip], arrays_b[clip]
+        variances = [_variance_of_mean(a), _variance_of_mean(b)]
+        seed_counts = [len(a), len(b)]
+        interval, degrees_of_freedom = _interval(float(a.mean() - b.mean()), variances, seed_counts)
+        per_clip.append(ClipDifference(clip, interval, degrees_of_freedom))
+        pooled_variances += [variance / num_clips**2 for variance in variances]
+        pooled_seed_counts += seed_counts
+
+    pooled_mean = sum(entry.interval.mean for entry in per_clip) / num_clips
+    pooled_interval, pooled_degrees_of_freedom = _interval(pooled_mean, pooled_variances, pooled_seed_counts)
+    return Comparison(
+        metric=metric,
+        methods=(name_a, name_b),
+        per_clip=tuple(per_clip),
+        pooled=PooledDifference(tuple(shared), pooled_interval, pooled_degrees_of_freedom),
+        clips_only_in={
+            name_a: tuple(clip for clip in clips_a if clip not in clips_b),
+            name_b: tuple(clip for clip in clips_b if clip not in clips_a),
+        },
+    )

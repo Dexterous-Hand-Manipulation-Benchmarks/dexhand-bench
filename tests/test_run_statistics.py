@@ -7,8 +7,11 @@ from scipy import stats  # pyright: ignore[reportMissingTypeStubs]
 
 from dexhand_bench.run_statistics import (
     ClipHeadline,
+    ClipResults,
     Headline,
+    MethodResults,
     PooledHeadline,
+    compare_methods,
     compute_insights,
     summarize_headline,
 )
@@ -25,6 +28,10 @@ POOLED_MIN_COVERAGE = 0.92
 POOLED_SEEDS = 3
 # Beta(a, b) per clip: different spreads and means near the bounds, as for success rates.
 POOLED_CLIP_BETAS = ((1.0, 4.0), (8.0, 2.0), (0.5, 0.5), (3.0, 3.0))
+TASK = "task0"
+# Hand-computed for first [1, 2, 3] vs second [0, 0, 3]: variances of the mean 1/3 and 1, so the difference 1 has
+# variance 4/3 and Welch degrees of freedom (4/3)^2 / ((1/3)^2 / 2 + 1^2 / 2) = 3.2.
+WELCH_DF = 3.2
 
 
 def test_the_clip_interval_is_the_t_interval_on_three_values() -> None:
@@ -152,4 +159,84 @@ def test_the_pooled_interval_covers_the_mean_of_clip_means_in_simulation() -> No
         }
         interval = summarize_headline(METRIC, values).pooled.interval
         covered += interval.low <= true_mean <= interval.high
+    assert covered / POOLED_COVERAGE_REPETITIONS >= POOLED_MIN_COVERAGE
+
+
+def _method(name: str, clips: dict[str, list[float]], task_hash: str = TASK) -> MethodResults:
+    return MethodResults(name, {clip: ClipResults(task_hash, values) for clip, values in clips.items()})
+
+
+def _t_975(degrees_of_freedom: float) -> float:
+    return float(stats.t.ppf(0.975, degrees_of_freedom))  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+
+
+def test_the_clip_difference_is_first_minus_second_with_a_welch_interval() -> None:
+    comparison = compare_methods(METRIC, _method("a", {"c1": [1, 2, 3]}), _method("b", {"c1": [0, 0, 3]}))
+    (clip,) = comparison.per_clip
+    half_width = _t_975(WELCH_DF) * math.sqrt(4 / 3)
+    assert clip.interval.mean == pytest.approx(1.0)
+    assert clip.degrees_of_freedom == pytest.approx(WELCH_DF)
+    assert (clip.interval.low, clip.interval.high) == pytest.approx((1 - half_width, 1 + half_width))
+    assert comparison.methods == ("a", "b")
+
+
+def test_the_pooled_difference_is_the_mean_of_the_clip_differences() -> None:
+    first = _method("a", {"c1": [1, 2, 3], "c2": [0.5, 0.5, 0.5]})
+    second = _method("b", {"c1": [0, 0, 3], "c2": [0.5, 0.5, 0.5]})
+    pooled = compare_methods(METRIC, first, second).pooled
+    # Mean of the differences 1 and 0; variance (1/3 + 1) / 2^2 = 1/3; Welch df (1/3)^2 / ((1/12)^2/2 + (1/4)^2/2).
+    half_width = _t_975(WELCH_DF) * math.sqrt(1 / 3)
+    assert pooled.clips == ("c1", "c2")
+    assert pooled.interval.mean == pytest.approx(0.5)
+    assert pooled.degrees_of_freedom == pytest.approx(WELCH_DF)
+    assert (pooled.interval.low, pooled.interval.high) == pytest.approx((0.5 - half_width, 0.5 + half_width))
+
+
+def test_clips_of_only_one_method_are_left_out_and_listed() -> None:
+    first = _method("a", {"c1": [1, 2], "only_a": [1, 1]})
+    second = _method("b", {"c1": [0, 1], "only_b": [0, 0]})
+    comparison = compare_methods(METRIC, first, second)
+    assert comparison.pooled.clips == ("c1",)
+    assert comparison.clips_only_in == {"a": ("only_a",), "b": ("only_b",)}
+
+
+def test_without_any_spread_the_difference_has_no_interval() -> None:
+    comparison = compare_methods(METRIC, _method("a", {"c1": [1, 1]}), _method("b", {"c1": [0, 0]}))
+    assert comparison.pooled.interval == comparison.per_clip[0].interval
+    assert (comparison.pooled.interval.low, comparison.pooled.interval.high) == (1.0, 1.0)
+    assert comparison.pooled.degrees_of_freedom is None
+
+
+def test_methods_evaluated_on_different_tasks_are_refused() -> None:
+    first = _method("a", {"c1": [1, 2]})
+    second = _method("b", {"c1": [0, 1]}, task_hash="other")
+    with pytest.raises(ValueError, match=r"different tasks for clip\(s\) \['c1'\]"):
+        compare_methods(METRIC, first, second)
+
+
+def test_methods_without_a_common_clip_are_refused() -> None:
+    with pytest.raises(ValueError, match="no clip in common"):
+        compare_methods(METRIC, _method("a", {"c1": [1, 2]}), _method("b", {"c2": [0, 1]}))
+
+
+def test_a_method_with_a_single_seed_on_a_shared_clip_is_refused() -> None:
+    with pytest.raises(ValueError, match=r"auc_add \(b\), clip c1: 1 seed"):
+        compare_methods(METRIC, _method("a", {"c1": [1, 2]}), _method("b", {"c1": [0]}))
+
+
+def test_the_pooled_difference_covers_the_true_difference_in_simulation() -> None:
+    rng = np.random.default_rng(2)
+    # The second method has a higher mean and a different spread on every clip.
+    second_betas = tuple((a + 1.0, b) for a, b in POOLED_CLIP_BETAS)
+    true_difference = sum(
+        a / (a + b) - c / (c + d) for (a, b), (c, d) in zip(POOLED_CLIP_BETAS, second_betas, strict=True)
+    ) / len(POOLED_CLIP_BETAS)
+    covered = 0
+    for _ in range(POOLED_COVERAGE_REPETITIONS):
+        first, second = (
+            _method(name, {f"clip{i}": rng.beta(a, b, size=POOLED_SEEDS).tolist() for i, (a, b) in enumerate(betas)})
+            for name, betas in (("a", POOLED_CLIP_BETAS), ("b", second_betas))
+        )
+        interval = compare_methods(METRIC, first, second).pooled.interval
+        covered += interval.low <= true_difference <= interval.high
     assert covered / POOLED_COVERAGE_REPETITIONS >= POOLED_MIN_COVERAGE
