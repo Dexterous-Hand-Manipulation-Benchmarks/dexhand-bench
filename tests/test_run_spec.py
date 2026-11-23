@@ -69,6 +69,68 @@ def test_untracked_files_make_the_checkout_dirty(tmp_path: Path, fake_dexmachina
     assert run_spec.load_run_spec(tmp_path).dexmachina_dirty
 
 
+def _diff_sha256() -> str | None:
+    return run_spec.current_dexmachina_state().diff_sha256
+
+
+def test_the_hash_is_none_for_a_clean_checkout_and_stable_for_the_same_changes(fake_dexmachina: Path) -> None:
+    assert _diff_sha256() is None
+    (fake_dexmachina / "file.py").write_text("x = 2\n")
+    (fake_dexmachina / "new.py").write_text("y = 1\n")
+    first = _diff_sha256()
+    assert first is not None and _diff_sha256() == first
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["deleted file", "binary file", "untracked content", "untracked name", "symlink target"],
+)
+def test_the_hash_tells_apart_changes_that_differ_only_in(fake_dexmachina: Path, change: str) -> None:
+    def make(variant: int) -> str | None:
+        for path in fake_dexmachina.iterdir():
+            if path.name != ".git":
+                path.unlink()
+        (fake_dexmachina / "file.py").write_text("x = 1\n")
+        if change == "deleted file":
+            (fake_dexmachina / "file.py").write_text("x = 2\n")
+            if variant:
+                (fake_dexmachina / "file.py").unlink()
+        elif change == "binary file":
+            (fake_dexmachina / "blob.bin").write_bytes(bytes([0, 255, variant]))
+        elif change == "untracked content":
+            (fake_dexmachina / "new.py").write_text(f"y = {variant}\n")
+        elif change == "untracked name":
+            (fake_dexmachina / f"new{variant}.py").write_text("y = 1\n")
+        else:
+            (fake_dexmachina / "link").symlink_to(f"target{variant}")
+        return _diff_sha256()
+
+    first, second = make(0), make(1)
+    assert first is not None and second is not None and first != second
+
+
+def test_an_untracked_nested_repository_is_refused_with_the_fix(fake_dexmachina: Path) -> None:
+    nested = fake_dexmachina / "nested"
+    nested.mkdir()
+    _git(nested, "init", "-q")
+    (nested / "a.py").write_text("z = 1\n")
+    with pytest.raises(RuntimeError, match="neither a file nor a symlink"):
+        run_spec.current_dexmachina_state()
+
+
+def test_saving_from_a_dirty_checkout_warns_with_the_fix(
+    tmp_path: Path, fake_dexmachina: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run_spec.save_run_spec(tmp_path / "clean", SPEC, {})
+    assert "WARNING" not in capsys.readouterr().out
+    (fake_dexmachina / "file.py").write_text("x = 2\n")
+    run_spec.save_run_spec(tmp_path / "dirty", SPEC, {})
+    warning = capsys.readouterr().out
+    assert "uncommitted changes" in warning and "Commit or stash" in warning
+    diff_sha256 = run_spec.load_run_spec(tmp_path / "dirty").dexmachina_diff_sha256
+    assert diff_sha256 is not None and diff_sha256 in warning
+
+
 def test_a_directory_without_the_file_is_refused(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="predates it"):
         run_spec.load_run_spec(tmp_path)
@@ -94,13 +156,24 @@ def test_a_file_with_other_keys_than_a_run_spec_is_refused(tmp_path: Path, chang
         run_spec.load_run_spec(tmp_path)
 
 
-@pytest.mark.parametrize("key, value", [(run_spec.SHA_KEY, 123), (run_spec.DIRTY_KEY, "no")])
+@pytest.mark.parametrize(
+    "key, value", [(run_spec.SHA_KEY, 123), (run_spec.DIRTY_KEY, "no"), (run_spec.DIFF_KEY, 1)]
+)
 def test_a_file_with_a_wrongly_typed_commit_record_is_refused(tmp_path: Path, key: str, value: object) -> None:
     path = run_spec.save_run_spec(tmp_path, SPEC, {})
     content: dict[str, Any] = json.loads(path.read_text())
     content[key] = value
     path.write_text(json.dumps(content))
-    with pytest.raises(ValueError, match="must be a string and a boolean"):
+    with pytest.raises(ValueError, match="must be a string, a boolean and a string or null"):
+        run_spec.load_run_spec(tmp_path)
+
+
+def test_a_hash_on_a_clean_checkout_is_refused(tmp_path: Path) -> None:
+    path = run_spec.save_run_spec(tmp_path, SPEC, {})
+    content: dict[str, Any] = json.loads(path.read_text())
+    content[run_spec.DIFF_KEY] = "0" * 64
+    path.write_text(json.dumps(content))
+    with pytest.raises(ValueError, match="only a checkout with uncommitted changes"):
         run_spec.load_run_spec(tmp_path)
 
 
@@ -108,9 +181,9 @@ def test_current_state_is_the_commit_and_dirty_flag_that_save_run_spec_records(
     tmp_path: Path, fake_dexmachina: Path
 ) -> None:
     clean = run_spec.current_dexmachina_state()
-    assert clean == run_spec.DexmachinaState(_git(fake_dexmachina, "rev-parse", "HEAD"), False)
+    assert clean == run_spec.DexmachinaState(_git(fake_dexmachina, "rev-parse", "HEAD"), False, None)
     (fake_dexmachina / "file.py").write_text("x = 2\n")
     assert run_spec.current_dexmachina_state().dirty
     run_spec.save_run_spec(tmp_path, SPEC, {})
     saved = run_spec.load_run_spec(tmp_path)
-    assert run_spec.current_dexmachina_state() == (saved.dexmachina_sha, saved.dexmachina_dirty)
+    assert run_spec.current_dexmachina_state() == saved.dexmachina_state

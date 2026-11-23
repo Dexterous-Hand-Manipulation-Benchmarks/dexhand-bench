@@ -124,6 +124,7 @@ def test_spec_matches_the_lab_table_and_the_run_name(
     assert spec.num_envs * CHECKPOINT_STEP == pytest.approx(REPORT_ENV_STEPS, rel=1e-3)
     assert run.dexmachina_sha == lab.LAB_DEXMACHINA_SHA
     assert run.dexmachina_dirty  # unknown working tree: recorded as dirty so that the eval warns
+    assert run.dexmachina_diff_sha256 is None
 
 
 def test_rewards_of_the_run_are_kept(tmp_path: Path) -> None:

@@ -111,7 +111,8 @@ def test_a_fresh_agent_is_scored_on_the_saved_spec(genesis_cpu, isolated_hand_cf
     assert metrics[f"{PREFIX}/floor/auc_add"] == evaluation.floor.auc_add
     assert 0.0 <= evaluation.floor.auc_add <= 1.0
     assert (metrics[f"{PREFIX}/checkpoint_step"], metrics[f"{PREFIX}/env_step"]) == (1.0, float(TRAIN_NUM_ENVS))
-    assert evaluation.evaluated_state == DexmachinaState(sha, current_dexmachina_state().dirty)
+    assert evaluation.evaluated_state == current_dexmachina_state()
+    assert evaluation.evaluated_state.sha == sha
     short_sha = sha[: eval_dexmachina.SHORT_SHA_LENGTH]
     stored = load_trajectory(step_dir / eval_dexmachina.TRAJECTORY_FILENAME.format(sha=short_sha))
     assert score(stored) == evaluation.eval_score
@@ -124,8 +125,8 @@ def _stub_evaluation() -> Any:
         success_2cm=0.5, success_5cm=0.5, nan_rate=0.0, drop_rate=0.0,
     )  # fmt: skip
     return eval_dexmachina.BenchmarkEvaluation(
-        eval_score=result, task_hash="t", saved_state=DexmachinaState("a", False),
-        evaluated_state=DexmachinaState("a", False), floor=replace(result, auc_add=0.1),
+        eval_score=result, task_hash="t", saved_state=DexmachinaState("a", False, None),
+        evaluated_state=DexmachinaState("a", False, None), floor=replace(result, auc_add=0.1),
         checkpoint_step=1, env_step=1,
     )
 
@@ -151,7 +152,7 @@ def test_a_different_dexmachina_commit_is_warned_about(tmp_path, monkeypatch, ca
     saved_state = current_dexmachina_state()
     other_commit = "0" * len(saved_state.sha)
     monkeypatch.setattr(
-        eval_dexmachina, "current_dexmachina_state", lambda: DexmachinaState(other_commit, saved_state.dirty)
+        eval_dexmachina, "current_dexmachina_state", lambda: saved_state._replace(sha=other_commit)
     )
     monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: pytest.fail("built the env"))
     with pytest.raises(pytest.fail.Exception, match="built the env"):  # the warning comes before the env is built

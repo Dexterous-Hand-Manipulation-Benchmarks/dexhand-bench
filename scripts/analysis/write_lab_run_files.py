@@ -36,6 +36,7 @@ from dexmachina.envs.constructors import (
     parse_clip_string,  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 )
 from dexmachina.envs.run_spec import (  # pyright: ignore[reportMissingTypeStubs]
+    DIFF_KEY,
     DIRTY_KEY,
     RUN_SPEC_FILENAME,
     SHA_KEY,
@@ -259,6 +260,7 @@ def write_spec_file(run_dir: Path, spec: EnvSpec, reward_overrides: Mapping[str,
     content = cast(dict[str, Any], json.loads(path.read_text()))
     content[SHA_KEY] = LAB_DEXMACHINA_SHA
     content[DIRTY_KEY] = True
+    content[DIFF_KEY] = None
     path.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n")
     saved = load_run_spec(run_dir)
     if saved.spec != spec or saved.dexmachina_sha != LAB_DEXMACHINA_SHA:
