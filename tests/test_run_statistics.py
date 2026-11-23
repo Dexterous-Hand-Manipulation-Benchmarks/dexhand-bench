@@ -13,6 +13,7 @@ from dexhand_bench.run_statistics import (
     PooledHeadline,
     compare_methods,
     compute_insights,
+    normalized_by_floor,
     summarize_headline,
 )
 
@@ -32,6 +33,7 @@ TASK = "task0"
 # Hand-computed for first [1, 2, 3] vs second [0, 0, 3]: variances of the mean 1/3 and 1, so the difference 1 has
 # variance 4/3 and Welch degrees of freedom (4/3)^2 / ((1/3)^2 / 2 + 1^2 / 2) = 3.2.
 WELCH_DF = 3.2
+FLOOR = 0.2
 
 
 def test_the_clip_interval_is_the_t_interval_on_three_values() -> None:
@@ -162,8 +164,10 @@ def test_the_pooled_interval_covers_the_mean_of_clip_means_in_simulation() -> No
     assert covered / POOLED_COVERAGE_REPETITIONS >= POOLED_MIN_COVERAGE
 
 
-def _method(name: str, clips: dict[str, list[float]], task_hash: str = TASK) -> MethodResults:
-    return MethodResults(name, {clip: ClipResults(task_hash, values) for clip, values in clips.items()})
+def _method(name: str, clips: dict[str, list[float]], task_hash: str = TASK, floor: float = FLOOR) -> MethodResults:
+    return MethodResults(
+        name, {clip: ClipResults(task_hash, values, [floor] * len(values)) for clip, values in clips.items()}
+    )
 
 
 def _t_975(degrees_of_freedom: float) -> float:
@@ -212,6 +216,18 @@ def test_methods_evaluated_on_different_tasks_are_refused() -> None:
     second = _method("b", {"c1": [0, 1]}, task_hash="other")
     with pytest.raises(ValueError, match=r"different tasks for clip\(s\) \['c1'\]"):
         compare_methods(METRIC, first, second)
+
+
+def test_methods_whose_floors_differ_within_a_clip_are_refused() -> None:
+    first = _method("a", {"c1": [1, 2]})
+    second = _method("b", {"c1": [0, 1]}, floor=FLOOR + 0.01)
+    with pytest.raises(ValueError, match=r"floors of a and b differ .* clip\(s\) \{'c1'"):
+        compare_methods(METRIC, first, second)
+
+
+def test_normalizing_maps_the_floor_to_zero_and_perfect_tracking_to_one() -> None:
+    normalized = normalized_by_floor(_method("a", {"c1": [FLOOR, 1.0, 0.0]}))
+    assert list(normalized.clips["c1"].values) == pytest.approx([0.0, 1.0, -FLOOR / (1 - FLOOR)])
 
 
 def test_methods_without_a_common_clip_are_refused() -> None:

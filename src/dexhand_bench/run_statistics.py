@@ -43,6 +43,10 @@ CONFIDENCE_LEVEL = 0.95
 QUARTILES = (25, 75)
 # A spread, and with it an interval, needs at least two seeds.
 MIN_SEEDS = 2
+# Largest spread of the zero-action floors in one cell (all seeds of both methods) that still counts as one floor. The
+# floor is bit-identical across seeds on CPU (measured 2026-11), so a larger spread means different code or device,
+# and the methods' scores would not be measured against the same task. Pending the team's GPU determinism check.
+FLOOR_TOLERANCE = 1e-6
 
 
 def _iqr(values: Sequence[float]) -> float:
@@ -195,10 +199,11 @@ def compute_insights(
 
 @dataclass(frozen=True)
 class ClipResults:
-    """One method's per-seed values on one clip, and the task hash of the eval they come from."""
+    """One method's per-seed values on one clip, the zero-action floor of each seed's eval, and the eval's task hash."""
 
     task_hash: str
     values: Sequence[float]
+    floors: Sequence[float]
 
 
 @dataclass(frozen=True)
@@ -247,6 +252,22 @@ def _interval(mean: float, variances: Sequence[float], seed_counts: Sequence[int
     return MeanInterval(mean, mean - half_width, mean + half_width), degrees_of_freedom
 
 
+def normalized_by_floor(method: MethodResults) -> MethodResults:
+    """Each seed's value as (value - floor) / (1 - floor) with its own eval's floor: 0 is the zero-action policy, 1 is
+    perfect tracking. Not clipped, since a policy can score below the floor."""
+    return MethodResults(
+        method.name,
+        {
+            clip: ClipResults(
+                results.task_hash,
+                [(value - floor) / (1 - floor) for value, floor in zip(results.values, results.floors, strict=True)],
+                results.floors,
+            )
+            for clip, results in method.clips.items()
+        },
+    )
+
+
 def compare_methods(metric: str, first: MethodResults, second: MethodResults) -> Comparison:
     """`first` minus `second`, per clip and pooled over the clips both have."""
     name_a, clips_a, name_b, clips_b = first.name, first.clips, second.name, second.clips
@@ -262,6 +283,18 @@ def compare_methods(metric: str, first: MethodResults, second: MethodResults) ->
             f"{metric}: {name_a} and {name_b} were evaluated on different tasks for clip(s) {differing} (task hashes "
             "differ), so their scores measure different things. Evaluate both on the same env config, or compare "
             "only clips with equal task hashes."
+        )
+    unequal_floors = {
+        clip: (min(floors), max(floors))
+        for clip in shared
+        if max(floors := [*clips_a[clip].floors, *clips_b[clip].floors]) - min(floors) > FLOOR_TOLERANCE
+    }
+    if unequal_floors:
+        raise ValueError(
+            f"{metric}: the zero-action floors of {name_a} and {name_b} differ by more than {FLOOR_TOLERANCE} within "
+            f"clip(s) {unequal_floors} (min, max). The floor is deterministic for one code version and device, so the "
+            "evaluations ran on different dexmachina code or devices and their scores are not comparable. Evaluate "
+            "all final checkpoints of the cell on one pinned dexmachina commit and device."
         )
     arrays_a = _checked(f"{metric} ({name_a})", {clip: clips_a[clip].values for clip in shared})
     arrays_b = _checked(f"{metric} ({name_b})", {clip: clips_b[clip].values for clip in shared})
