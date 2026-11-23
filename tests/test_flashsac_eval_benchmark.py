@@ -18,6 +18,7 @@ flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the fl
 OmegaConf = pytest.importorskip("omegaconf").OmegaConf
 gym = pytest.importorskip("gymnasium")
 create_agent = pytest.importorskip("flash_rl.agents").create_agent
+import dexmachina.envs.run_spec as run_spec  # noqa: E402
 from dexmachina.envs.evaluation import (  # noqa: E402  (after the skip: needs dexmachina)
     EvalScore,
     load_trajectory,
@@ -48,6 +49,15 @@ eval_dexmachina = importlib.util.module_from_spec(_module)
 sys.modules[_module.name] = eval_dexmachina
 _module.loader.exec_module(eval_dexmachina)
 PREFIX = eval_dexmachina.BENCHMARK_PREFIX
+
+
+@pytest.fixture(autouse=True)
+def clean_dexmachina(monkeypatch):
+    """The tests save and evaluate runs in this checkout of dexmachina, which may have uncommitted changes."""
+    clean = DexmachinaState(current_dexmachina_state().sha, False, None)
+    monkeypatch.setattr(run_spec, "current_dexmachina_state", lambda: clean)
+    monkeypatch.setattr(eval_dexmachina, "current_dexmachina_state", lambda: clean)
+    return clean
 
 
 @pytest.fixture(autouse=True)
@@ -94,9 +104,9 @@ def _emitted_by_the_training_eval() -> set[str]:
 
 
 @pytest.mark.sim
-def test_a_fresh_agent_is_scored_on_the_saved_spec(genesis_cpu, isolated_hand_cfgs, tmp_path):
+def test_a_fresh_agent_is_scored_on_the_saved_spec(genesis_cpu, isolated_hand_cfgs, tmp_path, clean_dexmachina):
     step_dir, _ = _save_run(tmp_path)
-    sha = current_dexmachina_state().sha
+    sha = clean_dexmachina.sha
 
     evaluation = eval_dexmachina.evaluate_benchmark(step_dir, CPU)
 
@@ -111,8 +121,7 @@ def test_a_fresh_agent_is_scored_on_the_saved_spec(genesis_cpu, isolated_hand_cf
     assert metrics[f"{PREFIX}/floor/auc_add"] == evaluation.floor.auc_add
     assert 0.0 <= evaluation.floor.auc_add <= 1.0
     assert (metrics[f"{PREFIX}/checkpoint_step"], metrics[f"{PREFIX}/env_step"]) == (1.0, float(TRAIN_NUM_ENVS))
-    assert evaluation.evaluated_state == current_dexmachina_state()
-    assert evaluation.evaluated_state.sha == sha
+    assert evaluation.evaluated_state == clean_dexmachina
     short_sha = sha[: eval_dexmachina.SHORT_SHA_LENGTH]
     stored = load_trajectory(step_dir / eval_dexmachina.TRAJECTORY_FILENAME.format(sha=short_sha))
     assert score(stored) == evaluation.eval_score
@@ -147,17 +156,48 @@ def test_a_run_without_env_spec_json_points_at_the_old_protocol(tmp_path):
         eval_dexmachina.evaluate_benchmark(step_dir, CPU)
 
 
-def test_a_different_dexmachina_commit_is_warned_about(tmp_path, monkeypatch, capsys):
+def test_a_different_dexmachina_commit_is_warned_about(tmp_path, monkeypatch, clean_dexmachina, capsys):
     step_dir, _ = _save_run(tmp_path)
-    saved_state = current_dexmachina_state()
-    other_commit = "0" * len(saved_state.sha)
+    other_commit = "0" * len(clean_dexmachina.sha)
     monkeypatch.setattr(
-        eval_dexmachina, "current_dexmachina_state", lambda: saved_state._replace(sha=other_commit)
+        eval_dexmachina, "current_dexmachina_state", lambda: clean_dexmachina._replace(sha=other_commit)
     )
-    monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: pytest.fail("built the env"))
+    _stop_before_the_env(monkeypatch)
     with pytest.raises(pytest.fail.Exception, match="built the env"):  # the warning comes before the env is built
         eval_dexmachina.evaluate_benchmark(step_dir, CPU)
     assert f"evaluated with {other_commit[:12]}" in capsys.readouterr().out
+
+
+def _stop_before_the_env(monkeypatch):
+    monkeypatch.setattr(eval_dexmachina, "make_eval_env", lambda spec, device: pytest.fail("built the env"))
+
+
+def test_a_dirty_dexmachina_at_evaluation_is_refused(tmp_path, monkeypatch, clean_dexmachina):
+    step_dir, _ = _save_run(tmp_path)
+    dirty = clean_dexmachina._replace(dirty=True, diff_sha256="0" * 64)
+    monkeypatch.setattr(eval_dexmachina, "current_dexmachina_state", lambda: dirty)
+    _stop_before_the_env(monkeypatch)
+    with pytest.raises(RuntimeError, match="evaluation: True.*--allow-dirty-dexmachina"):
+        eval_dexmachina.evaluate_benchmark(step_dir, CPU)
+
+
+def test_a_run_trained_on_a_dirty_dexmachina_is_refused(tmp_path, monkeypatch, clean_dexmachina):
+    dirty = clean_dexmachina._replace(dirty=True, diff_sha256="0" * 64)
+    monkeypatch.setattr(run_spec, "current_dexmachina_state", lambda: dirty)
+    step_dir, _ = _save_run(tmp_path)
+    _stop_before_the_env(monkeypatch)
+    with pytest.raises(RuntimeError, match="training: True.*--allow-dirty-dexmachina"):
+        eval_dexmachina.evaluate_benchmark(step_dir, CPU)
+
+
+def test_a_dirty_dexmachina_is_evaluated_with_a_warning_when_allowed(tmp_path, monkeypatch, clean_dexmachina, capsys):
+    step_dir, _ = _save_run(tmp_path)
+    dirty = clean_dexmachina._replace(dirty=True, diff_sha256="0" * 64)
+    monkeypatch.setattr(eval_dexmachina, "current_dexmachina_state", lambda: dirty)
+    _stop_before_the_env(monkeypatch)
+    with pytest.raises(pytest.fail.Exception, match="built the env"):
+        eval_dexmachina.evaluate_benchmark(step_dir, CPU, allow_dirty_dexmachina=True)
+    assert "Not for reported numbers" in capsys.readouterr().out
 
 
 def test_an_obs_normalizer_file_with_a_config_that_does_not_normalize_is_an_error(tmp_path):
@@ -253,7 +293,7 @@ def test_the_benchmark_metrics_are_plotted_against_the_env_step(monkeypatch):
     )
     monkeypatch.setattr(eval_dexmachina, "wandb", fake_wandb)
     monkeypatch.setattr(eval_dexmachina.gs, "init", lambda **kwargs: None)
-    monkeypatch.setattr(eval_dexmachina, "evaluate_benchmark", lambda *args: _stub_evaluation())
+    monkeypatch.setattr(eval_dexmachina, "evaluate_benchmark", lambda *args, **kwargs: _stub_evaluation())
     argv = ["--checkpoint_path", "step1", "--wandb_run_id", "r", "--device", CPU]
     args = eval_dexmachina.build_parser().parse_args(argv)
     eval_dexmachina.run_benchmark(args)
@@ -261,3 +301,17 @@ def test_the_benchmark_metrics_are_plotted_against_the_env_step(monkeypatch):
     assert kinds == ["define_metric", "log", "summary"]  # defined before the first log
     assert calls[0][1] == (f"{PREFIX}/*", {"step_metric": f"{PREFIX}/env_step"})
     assert f"{PREFIX}/task_hash" in calls[2][1]
+
+
+@pytest.mark.parametrize("flag, allowed", [([], False), (["--allow-dirty-dexmachina"], True)])
+def test_the_dirty_flag_reaches_the_evaluation(monkeypatch, flag, allowed):
+    passed: dict[str, Any] = {}
+
+    def fake_evaluate(checkpoint_dir, device, **kwargs):
+        passed.update(kwargs)
+        return _stub_evaluation()
+
+    monkeypatch.setattr(eval_dexmachina.gs, "init", lambda **kwargs: None)
+    monkeypatch.setattr(eval_dexmachina, "evaluate_benchmark", fake_evaluate)
+    eval_dexmachina.main(["--checkpoint_path", "step1", "--device", CPU, *flag])
+    assert passed == {"allow_dirty_dexmachina": allowed}
