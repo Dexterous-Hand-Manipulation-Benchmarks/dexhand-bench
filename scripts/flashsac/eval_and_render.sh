@@ -137,6 +137,7 @@ except Exception as e:
             echo "[INFO] [${CKPT_IDX}/${TOTAL_CKPTS}] Evaluating & Rendering Checkpoint: step${STEP_NUM}"
 
             python "${PYTHON_SCRIPT}" \
+              --old-protocol \
               --config_path "configs" \
               --checkpoint_path "${STEP_DIR}" \
               ${WANDB_ARG} \

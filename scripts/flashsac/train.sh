@@ -220,6 +220,7 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
 
                 python eval_dexmachina.py \
+                    --old-protocol \
                     --config_path "${CONFIG_PATH}" \
                     --config_name "${CONFIG_NAME}" \
                     --checkpoint_path "${STEP_DIR}" \

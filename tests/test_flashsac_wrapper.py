@@ -1,10 +1,13 @@
 """Unit tests for FlashSAC's DexMachina wrapper against a fake env (no simulator)."""
 import dataclasses
 import math
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 import torch
+from omegaconf import DictConfig, OmegaConf
 
 from conftest import flashsac_env_kwargs
 from fakes import FakeDexEnv, FakeDexVecEnv
@@ -136,3 +139,49 @@ def test_render_without_camera_raises() -> None:
     _, env = make()
     with pytest.raises(RuntimeError, match="record_video"):
         env.render()
+
+
+def _composed_eval_config() -> DictConfig:
+    """The read-only Hydra config of a dexmachina run, composed the way evaluation composes it."""
+    config_dir = str(Path(__file__).parents[1] / "algorithms/FlashSAC/configs")
+    cfg, _ = flash_dex.compose_eval_config(config_dir, "flashSAC_base", ["env=dexmachina", "env.rl_device=cpu"])
+    return cfg
+
+
+def test_dexmachina_spec_translates_the_hydra_kwargs():
+    kwargs = flashsac_env_kwargs({"hand": "allegro_hand", "clip": "box-30-230", "reward_cfg": {"force_penalty": 0.1}})
+    spec, reward_overrides = flash_dex.dexmachina_spec(8, kwargs, 7, "dexmachina/allegro_hand")
+    assert (spec.num_envs, spec.seed, spec.hand, spec.clip) == (8, 7, "allegro_hand", "box-30-230-s01-01")
+    assert spec.use_rl_games and spec.actuate_object
+    assert reward_overrides == {"force_penalty": 0.1}
+
+
+@pytest.mark.parametrize("missing", ["spec", "reward_overrides"])
+def test_wrapper_without_a_spec_refuses_to_report_one(missing):
+    from dexmachina.envs.spec import EnvSpec
+
+    _, env = make()
+    env.vec_env.spec = None if missing == "spec" else EnvSpec()
+    env.vec_env.reward_overrides = None if missing == "reward_overrides" else {}
+    with pytest.raises(ValueError, match="from_spec"):
+        _ = env.env_spec
+
+
+def test_run_files_round_trip(tmp_path):
+    from dexmachina.envs.run_spec import RUN_SPEC_FILENAME, load_run_spec
+    from dexmachina.envs.spec import EnvSpec
+
+    raw = FakeDexEnv()
+    vec: Any = FakeDexVecEnv(raw)
+    vec.spec = dataclasses.replace(EnvSpec(), hand="allegro_hand", use_rl_games=True)
+    vec.reward_overrides = {"force_penalty": 0.1}
+    env = flash_dex.GenesisFlashSACWrapper(vec, rl_device="cpu")
+    cfg = _composed_eval_config()
+
+    flash_dex.save_run_files(cfg, env, tmp_path)
+
+    assert (tmp_path / RUN_SPEC_FILENAME).is_file() and (tmp_path / flash_dex.RUN_CONFIG_FILENAME).is_file()
+    saved = load_run_spec(tmp_path)
+    assert (saved.spec, dict(saved.reward_overrides)) == (vec.spec, vec.reward_overrides)
+    resolved = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
+    assert OmegaConf.load(tmp_path / flash_dex.RUN_CONFIG_FILENAME) == resolved
