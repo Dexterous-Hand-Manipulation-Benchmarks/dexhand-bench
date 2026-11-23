@@ -20,6 +20,7 @@ gym = pytest.importorskip("gymnasium")
 create_agent = pytest.importorskip("flash_rl.agents").create_agent
 import dexmachina.envs.run_spec as run_spec  # noqa: E402
 from dexmachina.envs.evaluation import (  # noqa: E402  (after the skip: needs dexmachina)
+    EVAL_SEED,
     EvalScore,
     load_trajectory,
     score,
@@ -97,6 +98,17 @@ def _save_run(run_dir: Path, normalize_observation: bool = True, use_compile: bo
     return run_dir / STEP_DIRNAME, agent
 
 
+@pytest.mark.sim
+def test_the_eval_seed_does_not_change_the_score(genesis_cpu, isolated_hand_cfgs, tmp_path):
+    step_dir, _ = _save_run(tmp_path)
+    first = eval_dexmachina.evaluate_benchmark(step_dir, CPU, eval_seed=EVAL_SEED)
+    for trajectory in step_dir.glob(eval_dexmachina.TRAJECTORY_FILENAME.format(sha="*")):
+        trajectory.unlink()
+    second = eval_dexmachina.evaluate_benchmark(step_dir, CPU, eval_seed=EVAL_SEED + 1)
+    assert (second.eval_score, second.floor) == (first.eval_score, first.floor)
+    assert (first.provenance()[f"{PREFIX}/eval_seed"], second.provenance()[f"{PREFIX}/eval_seed"]) == (0, 1)
+
+
 def _emitted_by_the_training_eval() -> set[str]:
     """Every string constant in flash_rl/evaluation.py: the metric names the in-training eval can log."""
     tree = ast.parse((FLASHSAC_DIR / "flash_rl/evaluation.py").read_text())
@@ -136,7 +148,7 @@ def _stub_evaluation() -> Any:
     return eval_dexmachina.BenchmarkEvaluation(
         eval_score=result, task_hash="t", saved_state=DexmachinaState("a", False, None),
         evaluated_state=DexmachinaState("a", False, None), floor=replace(result, auc_add=0.1),
-        checkpoint_step=1, env_step=1,
+        checkpoint_step=1, env_step=1, eval_seed=0,
     )
 
 
@@ -303,8 +315,14 @@ def test_the_benchmark_metrics_are_plotted_against_the_env_step(monkeypatch):
     assert f"{PREFIX}/task_hash" in calls[2][1]
 
 
-@pytest.mark.parametrize("flag, allowed", [([], False), (["--allow-dirty-dexmachina"], True)])
-def test_the_dirty_flag_reaches_the_evaluation(monkeypatch, flag, allowed):
+@pytest.mark.parametrize(
+    "flags, expected",
+    [
+        ([], {"eval_seed": EVAL_SEED, "allow_dirty_dexmachina": False}),
+        (["--eval-seed", "7", "--allow-dirty-dexmachina"], {"eval_seed": 7, "allow_dirty_dexmachina": True}),
+    ],
+)
+def test_the_eval_seed_and_the_dirty_flag_reach_the_evaluation(monkeypatch, flags, expected):
     passed: dict[str, Any] = {}
 
     def fake_evaluate(checkpoint_dir, device, **kwargs):
@@ -313,5 +331,5 @@ def test_the_dirty_flag_reaches_the_evaluation(monkeypatch, flag, allowed):
 
     monkeypatch.setattr(eval_dexmachina.gs, "init", lambda **kwargs: None)
     monkeypatch.setattr(eval_dexmachina, "evaluate_benchmark", fake_evaluate)
-    eval_dexmachina.main(["--checkpoint_path", "step1", "--device", CPU, *flag])
-    assert passed == {"allow_dirty_dexmachina": allowed}
+    eval_dexmachina.main(["--checkpoint_path", "step1", "--device", CPU, *flags])
+    assert passed == expected
