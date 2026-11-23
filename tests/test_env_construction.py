@@ -28,7 +28,6 @@ SNAPSHOT_SEED = 0
 DEVICE = "cpu"
 NEUTRAL_ENV_NAME = "dexmachina/allegro_hand"
 DEFAULT_CLIP_SUFFIX = "s01-01"
-FLASHSAC_FALLBACK_CLIP = "box-30-230-s01-01"
 # FlashSAC's old default `clip`, which was silently replaced by the box clip.
 FLASHSAC_UNPARSEABLE_CLIP = "s01_ketchup_01"
 
@@ -136,7 +135,7 @@ class _ClipCaptured(Exception):
         self.clip = clip
 
 
-def _flashsac_clip_for(requested_clip, monkeypatch):
+def _flashsac_clip_for(requested_clip, monkeypatch, env_name=NEUTRAL_ENV_NAME):
     flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
     import dexmachina.envs.factory as factory
 
@@ -146,7 +145,7 @@ def _flashsac_clip_for(requested_clip, monkeypatch):
     monkeypatch.setattr(factory, "get_all_env_cfg", capture_clip)
     hydra_kwargs = flashsac_env_kwargs({"clip": requested_clip})
     with pytest.raises(_ClipCaptured) as captured:
-        flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED, NEUTRAL_ENV_NAME)
+        flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED, env_name)
     return captured.value.clip
 
 
@@ -155,16 +154,27 @@ def _flashsac_clip_for(requested_clip, monkeypatch):
     ("mixer-0-150", f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}"),
     ("ketchup-0-200", f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}"),
     (f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}", f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}"),
+    ("box", f"box-30-230-{DEFAULT_CLIP_SUFFIX}"),
+    ("mixer", f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}"),
 ])
 def test_flashsac_clip_mapping(requested, expected, monkeypatch):
     assert _flashsac_clip_for(requested, monkeypatch) == expected
 
 
-@pytest.mark.xfail(strict=True, reason="known issue #3: clips are matched by substring or fall back to "
-                                       f"{FLASHSAC_FALLBACK_CLIP}")
 @pytest.mark.parametrize("requested", ["box-0-200", "mixer-30-230"])
 def test_flashsac_keeps_other_clip_ranges(requested, monkeypatch):
     assert _flashsac_clip_for(requested, monkeypatch) == f"{requested}-{DEFAULT_CLIP_SUFFIX}"
+
+
+def test_flashsac_ignores_an_env_name_that_mentions_an_object(monkeypatch):
+    clip = _flashsac_clip_for("ketchup-0-200", monkeypatch, env_name="dexmachina/box")
+    assert clip == f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}"
+
+
+@pytest.mark.parametrize("requested", ["lunchbox", "box-60", "mixer_0_150"])
+def test_flashsac_rejects_names_that_only_contain_an_object(requested, monkeypatch):
+    with pytest.raises(ValueError, match="is not a dexmachina clip id"):
+        _flashsac_clip_for(requested, monkeypatch)
 
 
 def test_flashsac_rejects_unparseable_clip(monkeypatch):

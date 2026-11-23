@@ -154,8 +154,6 @@ because fixing them changes results:
   `DexMachinaArgs`. They differ in, for example, action mode (residual vs hybrid),
   `group_collisions`, observations (410 vs 510 dims), early-reset threshold, object
   gains and the whole curriculum schedule. Only the reward weights are aligned.
-- **FlashSAC maps clips by substring.** Any clip containing "box" becomes
-  `box-30-230-s01-01` and any "mixer" clip becomes `mixer-0-150-s01-01`.
 - **dexmachina flags every reset as both terminated and timed out**: time-outs,
   early resets and diverged (NaN) envs alike. The methods interpret these flags
   differently, so episode ends are terminal for some methods and bootstrapped for others.
