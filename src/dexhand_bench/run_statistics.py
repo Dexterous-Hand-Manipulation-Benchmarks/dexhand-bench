@@ -44,8 +44,8 @@ QUARTILES = (25, 75)
 # A spread, and with it an interval, needs at least two seeds.
 MIN_SEEDS = 2
 # Largest spread of the zero-action floors in one cell (all seeds of both methods) that still counts as one floor. The
-# floor is bit-identical across seeds on CPU (measured 2026-11), so a larger spread means different code or device,
-# and the methods' scores would not be measured against the same task. Pending the team's GPU determinism check.
+# floor is bit-identical across seeds on CPU (scripts/analysis/floor_add_auc.py, 3 seeds), so a larger spread means
+# different code or device, and the methods' scores would not be measured against the same task.
 FLOOR_TOLERANCE = 1e-6
 
 
@@ -205,6 +205,13 @@ class ClipResults:
     values: Sequence[float]
     floors: Sequence[float]
 
+    def __post_init__(self) -> None:
+        if len(self.values) != len(self.floors):
+            raise ValueError(
+                f"{len(self.values)} values but {len(self.floors)} floors; each seed's evaluation gives one of each. "
+                "Pass the floor of every seed's evaluation."
+            )
+
 
 @dataclass(frozen=True)
 class MethodResults:
@@ -252,6 +259,11 @@ def _interval(mean: float, variances: Sequence[float], seed_counts: Sequence[int
     return MeanInterval(mean, mean - half_width, mean + half_width), degrees_of_freedom
 
 
+def _floor_range(first: ClipResults, second: ClipResults) -> tuple[float, float]:
+    floors = [*first.floors, *second.floors]
+    return min(floors), max(floors)
+
+
 def normalized_by_floor(method: MethodResults) -> MethodResults:
     """Each seed's value as (value - floor) / (1 - floor) with its own eval's floor: 0 is the zero-action policy, 1 is
     perfect tracking. Not clipped, since a policy can score below the floor."""
@@ -284,11 +296,8 @@ def compare_methods(metric: str, first: MethodResults, second: MethodResults) ->
             "differ), so their scores measure different things. Evaluate both on the same env config, or compare "
             "only clips with equal task hashes."
         )
-    unequal_floors = {
-        clip: (min(floors), max(floors))
-        for clip in shared
-        if max(floors := [*clips_a[clip].floors, *clips_b[clip].floors]) - min(floors) > FLOOR_TOLERANCE
-    }
+    floor_ranges = {clip: _floor_range(clips_a[clip], clips_b[clip]) for clip in shared}
+    unequal_floors = {clip: (low, high) for clip, (low, high) in floor_ranges.items() if high - low > FLOOR_TOLERANCE}
     if unequal_floors:
         raise ValueError(
             f"{metric}: the zero-action floors of {name_a} and {name_b} differ by more than {FLOOR_TOLERANCE} within "

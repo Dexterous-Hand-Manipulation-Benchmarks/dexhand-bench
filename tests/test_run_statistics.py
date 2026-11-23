@@ -34,6 +34,10 @@ TASK = "task0"
 # variance 4/3 and Welch degrees of freedom (4/3)^2 / ((1/3)^2 / 2 + 1^2 / 2) = 3.2.
 WELCH_DF = 3.2
 FLOOR = 0.2
+# Pooled over c1 (above) and c2, first [0.4, 0.5, 0.6] vs second [0.5, 0.5, 0.5] (variances of the mean 0.01/3 and 0):
+# variance (1/3 + 1 + 0.01/3) / 2^2 = 4.01/12, df (4.01/12)^2 / (((1/12)^2 + (3/12)^2 + (0.01/12)^2) / 2).
+POOLED_VARIANCE = 4.01 / 12
+POOLED_WELCH_DF = 4.01**2 / ((1 + 9 + 0.01**2) / 2)
 
 
 def test_the_clip_interval_is_the_t_interval_on_three_values() -> None:
@@ -185,14 +189,13 @@ def test_the_clip_difference_is_first_minus_second_with_a_welch_interval() -> No
 
 
 def test_the_pooled_difference_is_the_mean_of_the_clip_differences() -> None:
-    first = _method("a", {"c1": [1, 2, 3], "c2": [0.5, 0.5, 0.5]})
+    first = _method("a", {"c1": [1, 2, 3], "c2": [0.4, 0.5, 0.6]})
     second = _method("b", {"c1": [0, 0, 3], "c2": [0.5, 0.5, 0.5]})
     pooled = compare_methods(METRIC, first, second).pooled
-    # Mean of the differences 1 and 0; variance (1/3 + 1) / 2^2 = 1/3; Welch df (1/3)^2 / ((1/12)^2/2 + (1/4)^2/2).
-    half_width = _t_975(WELCH_DF) * math.sqrt(1 / 3)
+    half_width = _t_975(POOLED_WELCH_DF) * math.sqrt(POOLED_VARIANCE)
     assert pooled.clips == ("c1", "c2")
     assert pooled.interval.mean == pytest.approx(0.5)
-    assert pooled.degrees_of_freedom == pytest.approx(WELCH_DF)
+    assert pooled.degrees_of_freedom == pytest.approx(POOLED_WELCH_DF)
     assert (pooled.interval.low, pooled.interval.high) == pytest.approx((0.5 - half_width, 0.5 + half_width))
 
 
@@ -223,6 +226,17 @@ def test_methods_whose_floors_differ_within_a_clip_are_refused() -> None:
     second = _method("b", {"c1": [0, 1]}, floor=FLOOR + 0.01)
     with pytest.raises(ValueError, match=r"floors of a and b differ .* clip\(s\) \{'c1'"):
         compare_methods(METRIC, first, second)
+
+
+def test_a_floor_spread_within_one_method_is_refused() -> None:
+    first = MethodResults("a", {"c1": ClipResults(TASK, [1, 2], [FLOOR, FLOOR + 0.01])})
+    with pytest.raises(ValueError, match="floors of a and b differ"):
+        compare_methods(METRIC, first, _method("b", {"c1": [0, 1]}))
+
+
+def test_values_and_floors_of_different_lengths_are_refused() -> None:
+    with pytest.raises(ValueError, match="2 values but 1 floors"):
+        ClipResults(TASK, [1, 2], [FLOOR])
 
 
 def test_normalizing_maps_the_floor_to_zero_and_perfect_tracking_to_one() -> None:
