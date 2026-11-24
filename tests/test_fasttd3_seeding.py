@@ -1,8 +1,8 @@
 """FastTD3's run seed must decide the agent's initial state on DexMachina.
 
-Building a DexMachina env reseeds the global numpy/torch RNGs with a fixed seed (curriculum, ADD vertex sampling),
-and FastTD3 builds three envs (train, eval, render) before its actor. The fake env here reseeds in every
-construction, like the real one. The fake has no ``reward_module``, so train.py's reward-config logging is skipped.
+FastTD3 builds three envs (train, eval, render) before its actor. DexMachina no longer reseeds the global RNGs
+while building an env; the fake env here still does, in every construction, to show that FastTD3 seeds again after
+the build. The fake has no ``reward_module``, so train.py's reward-config logging is skipped.
 """
 
 import importlib.util

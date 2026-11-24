@@ -27,16 +27,20 @@ DEFAULT_VERTEX_SEED = 42
 
 
 class _StubSolver:
+    def __init__(self):
+        self.sol_params = []
+
     def set_geom_sol_params(self, params):
-        pass
+        self.sol_params.append(params)
 
 
 class _StubObject:
     device = "cpu"
-    entity = type("Entity", (), {"_solver": _StubSolver()})()
 
     def __init__(self):
         self.gains = []
+        self.solver = _StubSolver()
+        self.entity = type("Entity", (), {"_solver": self.solver})()
 
     def set_joint_gains(self, **kwargs):
         self.gains.append(kwargs)
@@ -82,9 +86,22 @@ def test_curriculum_draws_follow_its_seed():
         curr.reset_object_gains()
         return obj.gains[0]["kp"]
 
-    first, other_global_seed = (sampled_gains(RUN_SEED, global_seed) for global_seed in GLOBAL_SEEDS)
-    assert torch.equal(first, other_global_seed)
-    assert not torch.equal(first, sampled_gains(RUN_SEED + 1, GLOBAL_SEEDS[0]))
+    same_seed_global_a, same_seed_global_b = (sampled_gains(RUN_SEED, global_seed) for global_seed in GLOBAL_SEEDS)
+    assert torch.equal(same_seed_global_a, same_seed_global_b)
+    assert not torch.equal(same_seed_global_a, sampled_gains(RUN_SEED + 1, GLOBAL_SEEDS[0]))
+
+
+def test_curriculum_solimp_draws_follow_its_seed():
+    def sampled_solimp(seed, global_seed):
+        obj = _StubObject()
+        curr = _make_curriculum(seed, obj)
+        np.random.seed(global_seed)
+        curr.reset_solimp()
+        return obj.solver.sol_params[0]
+
+    same_seed_global_a, same_seed_global_b = (sampled_solimp(RUN_SEED, global_seed) for global_seed in GLOBAL_SEEDS)
+    assert torch.equal(same_seed_global_a, same_seed_global_b)
+    assert not torch.equal(same_seed_global_a, sampled_solimp(RUN_SEED + 1, GLOBAL_SEEDS[0]))
 
 
 class _ConfigCaptured(Exception):
