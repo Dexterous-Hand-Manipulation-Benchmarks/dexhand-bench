@@ -1,11 +1,10 @@
 #!/bin/bash
-# One dexhand-ppo training run on DexMachina (benchmark protocol of the lab report).
+# One dexhand-ppo training run on DexMachina's benchmark task.
 # Run variables (environment): HAND, CLIP, SEED, PRESET (default | baseline | reppo_budget), WANDB (1/0).
 # Further Hydra overrides are passed through, e.g.:
 #   PRESET=reppo_budget SEED=1000 scripts/dexhand_ppo/train.sh ppo.kl_target=0.01
 # Smoke test on CPU without W&B:
-#   WANDB=0 scripts/dexhand_ppo/train.sh device=cpu env.num_envs=2 ppo.num_minibatches=2 total_steps=128 \
-#       env.dexmachina.num_eval_envs=1
+#   WANDB=0 scripts/dexhand_ppo/train.sh device=cpu env.num_envs=2 ppo.num_minibatches=2 total_steps=128
 set -e
 DHB_EXTRA=dexhand-ppo
 source "$(dirname "$0")/../common.sh"
