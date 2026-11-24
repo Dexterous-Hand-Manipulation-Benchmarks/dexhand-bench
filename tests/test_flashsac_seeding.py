@@ -1,8 +1,8 @@
 """FlashSAC's training seed must decide the agent's initial weights and warm-up actions, and the parallel envs must
 not share their random actions or exploration noise.
 
-DexMachina's curriculum reseeds the global RNGs with a fixed 42 while the env is built, so train.py has to seed
-again after building the envs; the fake env here does the same reseed.
+Resets while the env is built still consume the global RNGs, so train.py seeds again after building the envs; the
+fake env here overwrites the global RNGs with a fixed seed, the worst case of that.
 """
 
 import importlib.util
