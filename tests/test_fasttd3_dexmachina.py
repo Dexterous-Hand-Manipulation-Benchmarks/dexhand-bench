@@ -69,15 +69,14 @@ def test_rollout_through_the_shared_task_matches_golden(reseed, isolated_hand_cf
     assert ended_rows > 0, "no episode ended in the replay, so the terminal observation was never checked"
 
 
-def test_train_eval_and_render_envs_build_and_an_eval_episode_runs_to_its_end(reseed, isolated_hand_cfgs):
+def test_train_and_eval_envs_build_and_an_eval_episode_runs_to_its_end(reseed, isolated_hand_cfgs):
     meta = load_golden("fasttd3_allegro_box")[1]
     spec = td3_dex.benchmark_env_spec(meta["env_name"], meta["seed"], meta["num_envs"])
     reseed(meta["seed"])
     envs = td3_dex.build_dexmachina_envs(spec, "cpu", num_eval_envs=2)
 
     assert envs.train.spec == spec
-    assert envs.evaluation.num_envs == 2 and envs.render.num_envs == 1
-    assert envs.render.base_env._floating_camera is not None
+    assert envs.evaluation.num_envs == 2
     assert envs.evaluation.base_env.is_eval and envs.evaluation.base_env.curriculum is None
 
     evaluation = envs.evaluation

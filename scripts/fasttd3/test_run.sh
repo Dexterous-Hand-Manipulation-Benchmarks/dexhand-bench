@@ -47,7 +47,6 @@ python fast_td3/train.py \
     --v_max 250.0 \
     --disable_bootstrap \
     --save_interval 100 \
-    --render_interval 100 \
     --eval_interval 100 \
     --total_timesteps 200
 

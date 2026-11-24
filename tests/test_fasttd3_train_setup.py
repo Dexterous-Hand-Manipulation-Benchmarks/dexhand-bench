@@ -1,7 +1,7 @@
 """FastTD3's train.py setup on DexMachina, up to building the actor, with fake envs.
 
 The run seed must decide the agent's initial state: building a DexMachina env reseeds the global numpy/torch RNGs
-with a fixed seed (curriculum, ADD vertex sampling), and FastTD3 builds three envs (train, eval, render) before its
+with a fixed seed (curriculum, ADD vertex sampling), and FastTD3 builds two envs (train, eval) before its
 actor. The fake env here reseeds in every construction, like the real one.
 The run must save the env it trains on next to its checkpoints, for evaluation to rebuild.
 The run has W&B off, so train.py's env-config logging is skipped.
@@ -42,7 +42,7 @@ class ReseedingEnv(FakeDexEnv):
 
 
 def make_reseeding_envs_builder(dexmachina_env, seed: int):
-    """Stands in for build_dexmachina_envs: three envs (train, eval, render), each reseeding when built."""
+    """Stands in for build_dexmachina_envs: two envs (train, eval), each reseeding when built."""
 
     def build(spec, device, num_eval_envs):
         def wrapped():
@@ -51,7 +51,7 @@ def make_reseeding_envs_builder(dexmachina_env, seed: int):
         train = wrapped()
         # Like DexMachinaVecEnv.from_spec, which records what the train env was built from.
         train.vec_env.spec, train.vec_env.reward_overrides = spec, {}
-        return dexmachina_env.DexMachinaEnvs(train=train, evaluation=wrapped(), render=wrapped())
+        return dexmachina_env.DexMachinaEnvs(train=train, evaluation=wrapped())
 
     return build
 
@@ -74,7 +74,7 @@ def initial_actor_state(monkeypatch, tmp_path):
 
     run_dirs = itertools.count()
 
-    def run(agent: str, run_seed: int, env_reseed: int) -> dict[str, torch.Tensor]:
+    def run(agent: str, run_seed: int, env_reseed: int, extra_args: tuple[str, ...] = ()) -> dict[str, torch.Tensor]:
         # train.py writes its run files under models/ in the working directory, named by the second it starts in.
         work_dir = tmp_path / f"run{next(run_dirs)}"
         work_dir.mkdir()
@@ -92,6 +92,7 @@ def initial_actor_state(monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "argv", [
             "train.py", "--env_name", ENV_NAME, "--agent", agent,
             "--seed", str(run_seed), "--num_envs", str(NUM_ENVS), "--no_cuda", "--no_use_wandb", "--no_compile",
+            *extra_args,
         ])
         with pytest.raises(Captured) as captured:
             train.main()
@@ -131,3 +132,8 @@ def test_the_run_saves_the_env_spec_it_trains_on_in_its_checkpoint_directory(ini
     assert run_spec.spec == benchmark_env_spec(ENV_NAME, seed=3, num_envs=NUM_ENVS)
     assert dict(run_spec.reward_overrides) == {}
     assert run_spec.dexmachina_state.sha == current_dexmachina_state().sha
+
+
+def test_rendering_during_training_is_refused(initial_actor_state):
+    with pytest.raises(ValueError, match="--render_interval is 100"):
+        initial_actor_state("fasttd3", run_seed=0, env_reseed=42, extra_args=("--render_interval", "100"))

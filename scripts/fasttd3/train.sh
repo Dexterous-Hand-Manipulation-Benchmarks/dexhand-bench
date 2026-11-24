@@ -48,7 +48,6 @@ for seed in "${seeds[@]}"; do
             NUM_TRAIN_ENVS=2048
             TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) #65104
             SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 2))
-            RENDER_INTERVAL=$((TOTAL_TIMESTEPS / 4))
             EVAL_INTERVAL=$((TOTAL_TIMESTEPS / 4))
             BUFFER_SIZE=8192
 
@@ -100,7 +99,6 @@ for seed in "${seeds[@]}"; do
                 --v_max 250.0 \
                 --disable_bootstrap \
                 --save_interval ${SAVE_INTERVAL} \
-                --render_interval ${RENDER_INTERVAL} \
                 --eval_interval ${EVAL_INTERVAL} \
                 --total_timesteps ${TOTAL_TIMESTEPS}
 
