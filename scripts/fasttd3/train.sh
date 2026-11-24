@@ -150,30 +150,23 @@ for seed in "${seeds[@]}"; do
                     --step "${ENV_STEP}"
             done
 
-            # 2. Evaluate best checkpoint saved during training
-            if [ -f "${LATEST_TS_DIR}/best.pt" ]; then
-                BEST_CKPT="${LATEST_TS_DIR}/best.pt"
-                echo "[INFO] Evaluating best checkpoint: ${BEST_CKPT} (Reading true saved step from metadata)"
-
-                python fast_td3/eval_dexmachina.py \
-                    --checkpoint "$BEST_CKPT" \
-                    --num_envs 20 \
-                    --env_name "dexmachina|${hand}|${clip}" \
-                    --record_video \
-                    ${WANDB_ARG}
-            elif [ -f "${LATEST_TS_DIR}/final.pt" ]; then
-                FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
-                TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
-                echo "[INFO] Evaluating fallback final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
-
-                python fast_td3/eval_dexmachina.py \
-                    --checkpoint "$FINAL_CKPT" \
-                    --num_envs 20 \
-                    --env_name "dexmachina|${hand}|${clip}" \
-                    --record_video \
-                    ${WANDB_ARG} \
-                    --step "${TOTAL_ENV_STEPS}"
+            # 2. Evaluate the final checkpoint; the reported score. best.pt is never evaluated: it is picked on a
+            # training diagnostic, so its score would be selection-biased.
+            FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
+            if [ ! -f "$FINAL_CKPT" ]; then
+                echo "[ERROR] ${FINAL_CKPT} is missing: training of ${run_exp_name} did not finish." >&2
+                exit 1
             fi
+            TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
+            echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
+
+            python fast_td3/eval_dexmachina.py \
+                --checkpoint "$FINAL_CKPT" \
+                --num_envs 20 \
+                --env_name "dexmachina|${hand}|${clip}" \
+                --record_video \
+                ${WANDB_ARG} \
+                --step "${TOTAL_ENV_STEPS}"
 
             echo "[SUCCESS] All milestone evaluations completed for $run_exp_name"
             echo "--------------------------------------------------------"
