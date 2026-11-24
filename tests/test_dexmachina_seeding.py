@@ -1,6 +1,7 @@
 """The run seed must reach DexMachina's own random draws, and building an env must leave the global RNGs alone.
 
-The curriculum used to reseed numpy and torch with a fixed 42 at every build, and the ADD vertex sampling reseeded numpy.
+The curriculum used to reseed numpy and torch with a fixed 42 at every build, and the ADD vertex sampling
+reseeded numpy.
 """
 
 import json
@@ -134,7 +135,7 @@ def _object_with_mesh(tmp_path):
 def test_mesh_vertices_are_unchanged_and_global_numpy_is_untouched(tmp_path):
     obj, vertices = _object_with_mesh(tmp_path)
     np.random.seed(DEFAULT_VERTEX_SEED)
-    idxs = np.random.choice(vertices.shape[0], NUM_SAMPLES, replace=NUM_SAMPLES > vertices.shape[0])
+    idxs = np.random.choice(vertices.shape[0], NUM_SAMPLES, replace=vertices.shape[0] < NUM_SAMPLES)
     expected = torch.tensor(vertices[idxs], dtype=torch.float32)
 
     np.random.seed(RUN_SEED)
