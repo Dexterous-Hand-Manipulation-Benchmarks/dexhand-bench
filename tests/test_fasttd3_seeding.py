@@ -16,7 +16,8 @@ import torch
 
 from fakes import FakeDexEnv
 
-genesis = pytest.importorskip("genesis", reason="needs the fasttd3 extra")
+pytest.importorskip("fast_td3.environments.dexmachina_env", reason="needs the fasttd3 extra")
+genesis = pytest.importorskip("genesis")
 dexmachina_envs = pytest.importorskip("dexmachina.envs")
 dexmachina_constructors = pytest.importorskip("dexmachina.envs.constructors")
 
