@@ -47,7 +47,6 @@ for seed in "${seeds[@]}"; do
             run_exp_name="${hand}_${clip}_seed${seed}"
             NUM_TRAIN_ENVS=2048
             TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) #65104
-            MAX_EPOCHS=10000
             SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 2))
             RENDER_INTERVAL=$((TOTAL_TIMESTEPS / 4))
             EVAL_INTERVAL=$((TOTAL_TIMESTEPS / 4))
@@ -103,8 +102,7 @@ for seed in "${seeds[@]}"; do
                 --save_interval ${SAVE_INTERVAL} \
                 --render_interval ${RENDER_INTERVAL} \
                 --eval_interval ${EVAL_INTERVAL} \
-                --total_timesteps ${TOTAL_TIMESTEPS} \
-                --max_epochs ${MAX_EPOCHS}
+                --total_timesteps ${TOTAL_TIMESTEPS}
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 

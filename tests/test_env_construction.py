@@ -121,13 +121,11 @@ def test_flashsac_env_config(variant, hydra_kwargs, genesis_cpu, monkeypatch):
 def test_fasttd3_env_config(genesis_cpu):
     td3_dex = pytest.importorskip("fast_td3.environments.dexmachina_env", reason="needs the fasttd3 extra")
     from dexmachina.envs.constructors import get_all_env_cfg
-    from fast_td3.hyperparams import DexMachinaArgs
 
     meta = _golden_meta(FASTTD3_GOLDEN)
-    args = DexMachinaArgs(env_name=meta["env_name"], num_envs=SNAPSHOT_NUM_ENVS, seed=SNAPSHOT_SEED,
-                          vis=False, record_video=False, record_interval=0)
-    td3_dex.apply_dexmachina_env_name(args)
-    _assert_matches_snapshot("fasttd3/golden", {"env_kwargs": _normalise(get_all_env_cfg(args, device=DEVICE))})
+    spec = td3_dex.benchmark_env_spec(meta["env_name"], SNAPSHOT_SEED, SNAPSHOT_NUM_ENVS)
+    env_kwargs = get_all_env_cfg(spec.to_args(), device=DEVICE)
+    _assert_matches_snapshot("fasttd3/golden", {"env_kwargs": _normalise(env_kwargs)})
 
 
 class _ClipCaptured(Exception):

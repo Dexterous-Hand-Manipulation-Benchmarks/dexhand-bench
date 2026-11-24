@@ -50,7 +50,7 @@
      "kv": 0.9
     },
     "wait_epochs": 100,
-    "zero_epoch": 4000
+    "zero_epoch": 9000
    },
    "demo_data": {
     "contact_links_left": {
@@ -254,9 +254,9 @@
     "chunk_ep_length": -1,
     "dt": 0.016666666666666666,
     "early_reset_aux_thres": {
-     "bc": 0.0,
-     "con": 0.0,
-     "imi": 0.0
+     "bc": 0,
+     "con": 0,
+     "imi": 0
     },
     "early_reset_interval": 5,
     "early_reset_threshold": 0.6,
@@ -1841,11 +1841,11 @@
     "multiply_all_rew": false,
     "multiply_frame_contact": true,
     "multiply_task_rew": true,
-    "obj_arti_beta": 5.0,
+    "obj_arti_beta": 5,
     "obj_arti_weight": 5.0,
-    "obj_pos_beta": 10.0,
+    "obj_pos_beta": 10,
     "obj_pos_weight": 2.0,
-    "obj_rot_beta": 1.0,
+    "obj_rot_beta": 1,
     "obj_rot_weight": 3.0,
     "objdex_baseline": false,
     "retarget_objframe": true,
