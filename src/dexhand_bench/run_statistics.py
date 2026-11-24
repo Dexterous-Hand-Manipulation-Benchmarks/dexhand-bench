@@ -43,7 +43,7 @@ CONFIDENCE_LEVEL = 0.95
 QUARTILES = (25, 75)
 # A spread, and with it an interval, needs at least two seeds.
 MIN_SEEDS = 2
-# Largest spread of the zero-action floors in one cell (all seeds of both methods) that still counts as one floor. The
+# Largest spread of the zero-action floors of one clip (all seeds of both methods) that still counts as one floor. The
 # floor is bit-identical across seeds on CPU (scripts/analysis/floor_add_auc.py, 3 seeds), so a larger spread means
 # different code or device, and the methods' scores would not be measured against the same task.
 FLOOR_TOLERANCE = 1e-6
@@ -303,7 +303,7 @@ def compare_methods(metric: str, first: MethodResults, second: MethodResults) ->
             f"{metric}: the zero-action floors of {name_a} and {name_b} differ by more than {FLOOR_TOLERANCE} within "
             f"clip(s) {unequal_floors} (min, max). The floor is deterministic for one code version and device, so the "
             "evaluations ran on different dexmachina code or devices and their scores are not comparable. Evaluate "
-            "all final checkpoints of the cell on one pinned dexmachina commit and device."
+            "all final checkpoints of that clip on one pinned dexmachina commit and device."
         )
     arrays_a = _checked(f"{metric} ({name_a})", {clip: clips_a[clip].values for clip in shared})
     arrays_b = _checked(f"{metric} ({name_b})", {clip: clips_b[clip].values for clip in shared})
