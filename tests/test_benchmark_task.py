@@ -45,6 +45,7 @@ DIFFERS_FROM_DEFAULT: dict[str, Any] = {
     "dialback_ep_len": 80,
     "curr_rew_thres": (0.6, 0.01, 0.01, 0.01),
     "max_epochs": 10000,
+    "rand_init_ratio": 0.02,
 }
 CHOICES = RunChoices(
     hand="xhand", clip=BENCHMARK_CLIPS[1], seed=7, num_envs=16, vis=True, record_video=True, record_interval=100
