@@ -1,11 +1,14 @@
-"""FastTD3's run seed must decide the agent's initial state on DexMachina.
+"""FastTD3's train.py setup on DexMachina, up to building the actor, with fake envs.
 
-Building a DexMachina env reseeds the global numpy/torch RNGs with a fixed seed (curriculum, ADD vertex sampling),
-and FastTD3 builds three envs (train, eval, render) before its actor. The fake env here reseeds in every
-construction, like the real one. The run has W&B off, so train.py's env-config logging is skipped.
+The run seed must decide the agent's initial state: building a DexMachina env reseeds the global numpy/torch RNGs
+with a fixed seed (curriculum, ADD vertex sampling), and FastTD3 builds three envs (train, eval, render) before its
+actor. The fake env here reseeds in every construction, like the real one.
+The run must save the env it trains on next to its checkpoints, for evaluation to rebuild.
+The run has W&B off, so train.py's env-config logging is skipped.
 """
 
 import importlib.util
+import itertools
 import os
 import sys
 from pathlib import Path
@@ -45,13 +48,16 @@ def make_reseeding_envs_builder(dexmachina_env, seed: int):
         def wrapped():
             return dexmachina_env.GenesisFastTD3Wrapper(FakeDexVecEnv(ReseedingEnv(seed)), rl_device=device)
 
-        return dexmachina_env.DexMachinaEnvs(train=wrapped(), evaluation=wrapped(), render=wrapped())
+        train = wrapped()
+        # Like DexMachinaVecEnv.from_spec, which records what the train env was built from.
+        train.vec_env.spec, train.vec_env.reward_overrides = spec, {}
+        return dexmachina_env.DexMachinaEnvs(train=train, evaluation=wrapped(), render=wrapped())
 
     return build
 
 
 @pytest.fixture
-def initial_actor_state(monkeypatch):
+def initial_actor_state(monkeypatch, tmp_path):
     # train.py sets env vars at import and pulls its flat modules into sys.modules; undo both afterwards.
     environ_before = dict(os.environ)
     modules_before = set(sys.modules)
@@ -66,7 +72,13 @@ def initial_actor_state(monkeypatch):
     monkeypatch.setattr(genesis, "init", lambda **_: None)
     dexmachina_env = importlib.import_module("environments.dexmachina_env")
 
+    run_dirs = itertools.count()
+
     def run(agent: str, run_seed: int, env_reseed: int) -> dict[str, torch.Tensor]:
+        # train.py writes its run files under models/ in the working directory, named by the second it starts in.
+        work_dir = tmp_path / f"run{next(run_dirs)}"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
         actor_module = importlib.import_module(ACTOR_MODULES[agent])
         real_actor = actor_module.Actor
 
@@ -105,3 +117,17 @@ def test_run_seed_decides_initial_actor_state_despite_env_reseeding(initial_acto
     assert not same_state(seed_0, initial_actor_state(agent, run_seed=1, env_reseed=42))
     assert same_state(seed_0, initial_actor_state(agent, run_seed=0, env_reseed=42))
     assert same_state(seed_0, initial_actor_state(agent, run_seed=0, env_reseed=123))
+
+
+def test_the_run_saves_the_env_spec_it_trains_on_in_its_checkpoint_directory(initial_actor_state, tmp_path):
+    from dexmachina.envs.run_spec import RUN_SPEC_FILENAME, current_dexmachina_state, load_run_spec
+    from environments.dexmachina_env import benchmark_env_spec
+
+    initial_actor_state("fasttd3", run_seed=3, env_reseed=42)
+
+    saved_files = list(tmp_path.glob(f"run*/models/FastTD3/*/*/{RUN_SPEC_FILENAME}"))
+    assert len(saved_files) == 1, f"expected one {RUN_SPEC_FILENAME} under models/FastTD3, found {saved_files}"
+    run_spec = load_run_spec(saved_files[0].parent)
+    assert run_spec.spec == benchmark_env_spec(ENV_NAME, seed=3, num_envs=NUM_ENVS)
+    assert dict(run_spec.reward_overrides) == {}
+    assert run_spec.dexmachina_state.sha == current_dexmachina_state().sha
