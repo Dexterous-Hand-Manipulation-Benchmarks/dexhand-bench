@@ -5,10 +5,14 @@ with a fixed seed (curriculum, ADD vertex sampling), and FastTD3 builds two envs
 actor. The fake env here reseeds in every construction, like the real one.
 The run must save the env it trains on next to its checkpoints, for evaluation to rebuild.
 The run has W&B off, so train.py's env-config logging is skipped.
+The networks training starts from are pinned by a golden fixture, so refactoring how train.py builds them cannot change
+training. Record it deliberately, on purpose-made changes only (a torch bump changes it too), always all cases:
+    FASTTD3_RECORD_GOLDEN=1 uv run --exact --extra fasttd3 pytest tests/test_fasttd3_train_setup.py -k golden
 """
 
 import importlib.util
 import itertools
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,6 +21,7 @@ import numpy as np
 import pytest
 import torch
 
+from conftest import CURRENT_PLATFORM, GOLDEN_DIR
 from fakes import FakeDexEnv, FakeDexVecEnv
 
 pytest.importorskip("fast_td3.environments.dexmachina_env", reason="needs the fasttd3 extra")
@@ -27,7 +32,31 @@ ENV_NAME = "dexmachina|allegro_hand|box-30-230"
 NUM_ENVS = 2
 ACTOR_MODULES = {"fasttd3": "fast_td3", "fasttd3_simbav2": "fast_td3_simbav2"}
 # train.py imports these flat from its own directory; the installed fast_td3 package would shadow fast_td3.py.
-FLAT_MODULES = ("fast_td3", "fast_td3_simbav2", "fast_td3_utils", "hyperparams", "environments")
+FLAT_MODULES = ("fast_td3", "fast_td3_simbav2", "fast_td3_utils", "hyperparams", "environments", "agent_builders")
+
+
+INITIAL_NETWORKS_FILE = GOLDEN_DIR / "fasttd3_initial_networks.json"
+RECORD_GOLDEN = os.environ.get("FASTTD3_RECORD_GOLDEN") == "1"
+# The release, not the build tag (+cu124, +cpu): the CPU init does not depend on the CUDA build.
+TORCH_RELEASE = torch.__version__.split("+")[0]
+# Run seed and env reseed of every golden case; the case only chooses agent and network options.
+GOLDEN_SEEDS = {"run_seed": 0, "env_reseed": 42}
+GOLDEN_CASES = {
+    "fasttd3": ("fasttd3", ()),
+    "fasttd3_simbav2": ("fasttd3_simbav2", ()),
+    # SimNorm is fasttd3-only; a non-default seq_len shows the actor's own seq_len reaches it.
+    "fasttd3_sim_actor": ("fasttd3", ("--sim_type", "sim_actor", "--actor_seq_len", "4")),
+    # Different actor and critic seq_len and a non-default sim_dimension: each network gets its own values.
+    "fasttd3_sim_both": (
+        "fasttd3",
+        ("--sim_type", "sim_both", "--actor_seq_len", "4", "--critic_seq_len", "2", "--sim_dimension", "16"),
+    ),
+}
+# Sums of float32 tensors in float64: equal bits give equal sums; another platform may round the init differently in
+# the last bit, which this tolerance absorbs while a different init or draw order is off by far more.
+STATS_RTOL = 1e-6
+OUTPUT_RTOL = 1e-5
+OUTPUT_ATOL = 1e-7
 
 
 class Captured(Exception):
@@ -57,7 +86,7 @@ def make_reseeding_envs_builder(dexmachina_env, seed: int):
 
 
 @pytest.fixture
-def initial_actor_state(monkeypatch, tmp_path):
+def train_setup(monkeypatch, tmp_path):
     # train.py sets env vars at import and pulls its flat modules into sys.modules; undo both afterwards.
     environ_before = dict(os.environ)
     modules_before = set(sys.modules)
@@ -74,19 +103,40 @@ def initial_actor_state(monkeypatch, tmp_path):
 
     run_dirs = itertools.count()
 
-    def run(agent: str, run_seed: int, env_reseed: int, extra_args: tuple[str, ...] = ()) -> dict[str, torch.Tensor]:
+    def run(agent: str, run_seed: int, env_reseed: int, extra_args: tuple[str, ...] = (), stop_at: str = "actor"):
+        """Runs train.main() until it builds the actor (returns its state) or the replay buffer (returns every
+        (role, module) the actor and critic classes built, in order)."""
         # train.py writes its run files under models/ in the working directory, named by the second it starts in.
         work_dir = tmp_path / f"run{next(run_dirs)}"
         work_dir.mkdir()
         monkeypatch.chdir(work_dir)
-        actor_module = importlib.import_module(ACTOR_MODULES[agent])
-        real_actor = actor_module.Actor
+        agent_module = importlib.import_module(ACTOR_MODULES[agent])
+        real_actor, real_critic = agent_module.Actor, agent_module.Critic
+        built: list[tuple[str, torch.nn.Module]] = []
 
         def capture_initial_state(**kwargs):
             actor = real_actor(**kwargs)
             raise Captured({k: v.detach().clone() for k, v in actor.state_dict().items()})
 
-        monkeypatch.setattr(actor_module, "Actor", capture_initial_state)
+        def recording(role, cls):
+            def build(**kwargs):
+                module = cls(**kwargs)
+                built.append((role, module))
+                return module
+
+            return build
+
+        def stop_at_replay_buffer(**_):
+            raise Captured(built)
+
+        if stop_at == "actor":
+            monkeypatch.setattr(agent_module, "Actor", capture_initial_state)
+        elif stop_at == "replay_buffer":
+            monkeypatch.setattr(agent_module, "Actor", recording("actor", real_actor))
+            monkeypatch.setattr(agent_module, "Critic", recording("critic", real_critic))
+            monkeypatch.setattr(train, "SimpleReplayBuffer", stop_at_replay_buffer)
+        else:
+            raise ValueError(f"stop_at must be 'actor' or 'replay_buffer', got {stop_at!r}")
         build_envs = make_reseeding_envs_builder(dexmachina_env, env_reseed)
         monkeypatch.setattr(dexmachina_env, "build_dexmachina_envs", build_envs)
         monkeypatch.setattr(sys, "argv", [
@@ -96,7 +146,9 @@ def initial_actor_state(monkeypatch, tmp_path):
         ])
         with pytest.raises(Captured) as captured:
             train.main()
-        monkeypatch.setattr(actor_module, "Actor", real_actor)  # the next run() wraps the real class again
+        # The next run() wraps the real classes again.
+        monkeypatch.setattr(agent_module, "Actor", real_actor)
+        monkeypatch.setattr(agent_module, "Critic", real_critic)
         return captured.value.args[0]
 
     yield run
@@ -112,19 +164,19 @@ def same_state(a: dict[str, torch.Tensor], b: dict[str, torch.Tensor]) -> bool:
 
 
 @pytest.mark.parametrize("agent", ACTOR_MODULES)
-def test_run_seed_decides_initial_actor_state_despite_env_reseeding(initial_actor_state, agent):
-    seed_0 = initial_actor_state(agent, run_seed=0, env_reseed=42)
+def test_run_seed_decides_initial_actor_state_despite_env_reseeding(train_setup, agent):
+    seed_0 = train_setup(agent, run_seed=0, env_reseed=42)
     assert "noise_scales" in seed_0
-    assert not same_state(seed_0, initial_actor_state(agent, run_seed=1, env_reseed=42))
-    assert same_state(seed_0, initial_actor_state(agent, run_seed=0, env_reseed=42))
-    assert same_state(seed_0, initial_actor_state(agent, run_seed=0, env_reseed=123))
+    assert not same_state(seed_0, train_setup(agent, run_seed=1, env_reseed=42))
+    assert same_state(seed_0, train_setup(agent, run_seed=0, env_reseed=42))
+    assert same_state(seed_0, train_setup(agent, run_seed=0, env_reseed=123))
 
 
-def test_the_run_saves_the_env_spec_it_trains_on_in_its_checkpoint_directory(initial_actor_state, tmp_path):
+def test_the_run_saves_the_env_spec_it_trains_on_in_its_checkpoint_directory(train_setup, tmp_path):
     from dexmachina.envs.run_spec import RUN_SPEC_FILENAME, current_dexmachina_state, load_run_spec
     from environments.dexmachina_env import benchmark_env_spec
 
-    initial_actor_state("fasttd3", run_seed=3, env_reseed=42)
+    train_setup("fasttd3", run_seed=3, env_reseed=42)
 
     saved_files = list(tmp_path.glob(f"run*/models/FastTD3/*/*/{RUN_SPEC_FILENAME}"))
     assert len(saved_files) == 1, f"expected one {RUN_SPEC_FILENAME} under models/FastTD3, found {saved_files}"
@@ -134,6 +186,66 @@ def test_the_run_saves_the_env_spec_it_trains_on_in_its_checkpoint_directory(ini
     assert run_spec.dexmachina_state.sha == current_dexmachina_state().sha
 
 
-def test_rendering_during_training_is_refused(initial_actor_state):
+def test_rendering_during_training_is_refused(train_setup):
     with pytest.raises(ValueError, match="--render_interval is 100"):
-        initial_actor_state("fasttd3", run_seed=0, env_reseed=42, extra_args=("--render_interval", "100"))
+        train_setup("fasttd3", run_seed=0, env_reseed=42, extra_args=("--render_interval", "100"))
+
+
+def network_fingerprint(built: list[tuple[str, torch.nn.Module]]) -> dict:
+    """Roles in construction order; shape, sum and sum of squares of every tensor of each module; outputs of the first
+    actor and the first critic on fixed inputs (they also see constants that are not in the state dict, such as
+    SimbaV2's c_shift). A different kwarg, init or RNG draw order changes at least one of them."""
+    fake = FakeDexEnv()
+    obs = torch.linspace(-1.0, 1.0, 4 * fake.obs_dim).reshape(4, -1)
+    actions = torch.linspace(-0.5, 0.5, 4 * fake.action_dim).reshape(4, -1)
+    (_, actor), (_, critic) = built[0], built[2]
+    with torch.no_grad():
+        actor_output = actor(obs)
+        critic_output = torch.stack(critic(obs, actions))
+    return {
+        "roles": [role for role, _ in built],
+        "stats": [
+            {
+                key: {"shape": list(t.shape), "sum": float(t.double().sum()), "sumsq": float(t.double().square().sum())}
+                for key, t in module.state_dict().items()
+            }
+            for _, module in built
+        ],
+        "actor_output": actor_output.tolist(),
+        "critic_output": critic_output.tolist(),
+    }
+
+
+@pytest.mark.parametrize("case", GOLDEN_CASES)
+def test_golden_initial_networks_of_training(train_setup, case):
+    agent, extra_args = GOLDEN_CASES[case]
+    built = train_setup(agent, **GOLDEN_SEEDS, extra_args=extra_args, stop_at="replay_buffer")
+    fingerprint = network_fingerprint(built)
+    if RECORD_GOLDEN:
+        recorded = json.loads(INITIAL_NETWORKS_FILE.read_text()) if INITIAL_NETWORKS_FILE.exists() else {"cases": {}}
+        recorded.update(recorded_on=CURRENT_PLATFORM, torch_version=TORCH_RELEASE)
+        recorded["cases"][case] = fingerprint
+        INITIAL_NETWORKS_FILE.write_text(json.dumps(recorded, indent=1) + "\n")
+        pytest.skip(f"recorded {case} into {INITIAL_NETWORKS_FILE.name}")
+
+    golden = json.loads(INITIAL_NETWORKS_FILE.read_text())
+    assert golden["torch_version"] == TORCH_RELEASE, (
+        f"The fixture was recorded with torch {golden['torch_version']}, this is {TORCH_RELEASE}: a torch bump "
+        "may change the initial networks. Re-record on purpose (see the module docstring) with a Decisions entry."
+    )
+    expected = golden["cases"][case]
+    where = f"(fixture recorded on {golden['recorded_on']}, running on {CURRENT_PLATFORM})"
+    assert fingerprint["roles"] == expected["roles"] == ["actor", "actor", "critic", "critic"]
+    for index, (stats, expected_stats) in enumerate(zip(fingerprint["stats"], expected["stats"], strict=True)):
+        assert stats.keys() == expected_stats.keys(), f"module {index} has different tensors"
+        for key, tensor_stats in stats.items():
+            expected_tensor = expected_stats[key]
+            assert tensor_stats["shape"] == expected_tensor["shape"], f"module {index} {key} shape"
+            assert (tensor_stats["sum"], tensor_stats["sumsq"]) == pytest.approx(
+                (expected_tensor["sum"], expected_tensor["sumsq"]), rel=STATS_RTOL
+            ), f"module {index} {key} {where}"
+    for output in ("actor_output", "critic_output"):
+        torch.testing.assert_close(
+            torch.tensor(fingerprint[output]), torch.tensor(expected[output]),
+            rtol=OUTPUT_RTOL, atol=OUTPUT_ATOL, msg=lambda m, output=output: f"{output} {where}: {m}",
+        )
