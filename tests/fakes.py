@@ -53,6 +53,9 @@ class FakeDexEnv:
 class FakeDexVecEnv:
     """Stand-in for DexMachinaVecEnv over a FakeDexEnv: a time-out is terminated, never truncated."""
 
+    # Like DexMachinaVecEnv: the EnvSpec it was built from, None for an env wrapped directly.
+    spec: Any = None
+
     def __init__(self, env: FakeDexEnv) -> None:
         self.env = env
         self.num_envs = env.num_envs
