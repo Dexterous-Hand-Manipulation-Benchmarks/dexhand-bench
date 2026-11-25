@@ -74,13 +74,14 @@ def make_reseeding_envs_builder(dexmachina_env, seed: int):
     """Stands in for build_dexmachina_envs: two envs (train, eval), each reseeding when built."""
 
     def build(spec, device, num_eval_envs):
-        def wrapped():
-            return dexmachina_env.GenesisFastTD3Wrapper(FakeDexVecEnv(ReseedingEnv(seed)), rl_device=device)
+        def wrapped(built_from=None):
+            vec_env = FakeDexVecEnv(ReseedingEnv(seed))
+            # Like DexMachinaVecEnv.from_spec, which records what the train env was built from.
+            vec_env.spec, vec_env.reward_overrides = built_from, {}
+            # train.py asks for cuda:<rank> even with --no_cuda; the fakes stay on the CPU.
+            return dexmachina_env.GenesisFastTD3Wrapper(vec_env, rl_device="cpu")
 
-        train = wrapped()
-        # Like DexMachinaVecEnv.from_spec, which records what the train env was built from.
-        train.vec_env.spec, train.vec_env.reward_overrides = spec, {}
-        return dexmachina_env.DexMachinaEnvs(train=train, evaluation=wrapped())
+        return dexmachina_env.DexMachinaEnvs(train=wrapped(built_from=spec), evaluation=wrapped())
 
     return build
 
@@ -104,8 +105,8 @@ def train_setup(monkeypatch, tmp_path):
     run_dirs = itertools.count()
 
     def run(agent: str, run_seed: int, env_reseed: int, extra_args: tuple[str, ...] = (), stop_at: str = "actor"):
-        """Runs train.main() until it builds the actor (returns its state) or the replay buffer (returns every
-        (role, module) the actor and critic classes built, in order)."""
+        """Runs train.main() until it builds the actor (returns its state), until the replay buffer (returns every
+        (role, module) the actor and critic classes built, in order), or to the end (returns the working directory)."""
         # train.py writes its run files under models/ in the working directory, named by the second it starts in.
         work_dir = tmp_path / f"run{next(run_dirs)}"
         work_dir.mkdir()
@@ -135,8 +136,8 @@ def train_setup(monkeypatch, tmp_path):
             monkeypatch.setattr(agent_module, "Actor", recording("actor", real_actor))
             monkeypatch.setattr(agent_module, "Critic", recording("critic", real_critic))
             monkeypatch.setattr(train, "SimpleReplayBuffer", stop_at_replay_buffer)
-        else:
-            raise ValueError(f"stop_at must be 'actor' or 'replay_buffer', got {stop_at!r}")
+        elif stop_at != "end":
+            raise ValueError(f"stop_at must be 'actor', 'replay_buffer' or 'end', got {stop_at!r}")
         build_envs = make_reseeding_envs_builder(dexmachina_env, env_reseed)
         monkeypatch.setattr(dexmachina_env, "build_dexmachina_envs", build_envs)
         monkeypatch.setattr(sys, "argv", [
@@ -144,6 +145,9 @@ def train_setup(monkeypatch, tmp_path):
             "--seed", str(run_seed), "--num_envs", str(NUM_ENVS), "--no_cuda", "--no_use_wandb", "--no_compile",
             *extra_args,
         ])
+        if stop_at == "end":
+            train.main()
+            return work_dir
         with pytest.raises(Captured) as captured:
             train.main()
         # The next run() wraps the real classes again.
@@ -249,3 +253,25 @@ def test_golden_initial_networks_of_training(train_setup, case):
             torch.tensor(fingerprint[output]), torch.tensor(expected[output]),
             rtol=OUTPUT_RTOL, atol=OUTPUT_ATOL, msg=lambda m, output=output: f"{output} {where}: {m}",
         )
+
+
+# Saves need global_step > learning_starts and a multiple of save_interval (2 here). With 4 iterations the save at
+# loop index 2 is mid-run; with 3 it is the last iteration, whose weights only final.pt holds.
+@pytest.mark.parametrize(("total", "expected_step_files"), [(4, {"step3.pt": 3}), (3, {})])
+def test_step_checkpoints_are_named_after_and_store_the_iterations_done(
+    train_setup, monkeypatch, total, expected_step_files
+):
+    # The fake env has no curriculum.
+    dexmachina_env = importlib.import_module("environments.dexmachina_env")
+    monkeypatch.setattr(dexmachina_env, "advance_curriculum", lambda envs, step, total, current_epoch: current_epoch)
+    work_dir = train_setup(
+        "fasttd3", run_seed=0, env_reseed=42, stop_at="end",
+        extra_args=(
+            "--total_timesteps", str(total), "--save_interval", "2", "--learning_starts", "0", "--batch_size", "8",
+        ),
+    )
+    (checkpoint_dir,) = work_dir.glob("models/FastTD3/*/*/")
+    saved = {path.name: torch.load(path, weights_only=False)["global_step"] for path in checkpoint_dir.glob("*.pt")}
+    step_files = {name: step for name, step in saved.items() if name.startswith("step")}
+    assert step_files == expected_step_files
+    assert saved["final.pt"] == total
