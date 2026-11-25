@@ -329,6 +329,27 @@ def test_the_benchmark_metrics_are_plotted_against_the_env_step(monkeypatch):
     assert f"{PREFIX}/task_hash" in calls[2][1]
 
 
+def test_the_evaluation_resumes_the_training_run_and_never_creates_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    init_kwargs: dict[str, Any] = {}
+
+    def fake_init(**kwargs: Any) -> Any:
+        init_kwargs.update(kwargs)
+        return SimpleNamespace(summary=SimpleNamespace(update=lambda values: None))
+
+    fake_wandb = SimpleNamespace(
+        init=fake_init, define_metric=lambda *a, **k: None, log=lambda values: None, finish=lambda: None
+    )
+    monkeypatch.setattr(eval_dexmachina, "wandb", fake_wandb)
+    monkeypatch.setattr(eval_dexmachina.gs, "init", lambda **kwargs: None)
+    monkeypatch.setattr(eval_dexmachina, "evaluate_benchmark", lambda *args, **kwargs: _stub_evaluation())
+    args = eval_dexmachina.build_parser().parse_args(
+        ["--checkpoint_path", "step1", "--wandb_run_id", "r", "--device", CPU]
+    )
+    eval_dexmachina.run_benchmark(args)
+    assert init_kwargs["id"] == "r"
+    assert init_kwargs["resume"] == "must"
+
+
 @pytest.mark.parametrize(
     "flags, expected",
     [
