@@ -85,7 +85,7 @@ for hand in HANDS:
             results.append((config_name, "ERROR"))
 
 print("\n" + "=" * 70)
-print(" 📋 SMOKE TEST SUMMARY")
+print(" SMOKE TEST SUMMARY")
 print("=" * 70)
 all_passed = True
 for name, status in results:
