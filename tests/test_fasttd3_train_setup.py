@@ -1,8 +1,7 @@
 """FastTD3's train.py setup on DexMachina, up to building the actor, with fake envs.
 
-The run seed must decide the agent's initial state: building a DexMachina env reseeds the global numpy/torch RNGs
-with a fixed seed (curriculum, ADD vertex sampling), and FastTD3 builds two envs (train, eval) before its
-actor. The fake env here reseeds in every construction, like the real one.
+The run seed must decide the agent's initial state, whatever building the two envs (train, eval) does to the global
+numpy/torch RNGs; the fake env here reseeds in every construction, the worst case.
 The run must save the env it trains on next to its checkpoints, for evaluation to rebuild.
 The runs have W&B off (train.py's env-config logging is skipped), except where a test passes a W&B stand-in.
 The networks training starts from are pinned by a golden fixture, so refactoring how train.py builds them cannot change
