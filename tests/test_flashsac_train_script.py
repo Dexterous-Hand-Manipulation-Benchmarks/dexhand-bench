@@ -1,4 +1,4 @@
-"""scripts/flashsac/train.sh evaluates with the shared protocol; the checks read the script text (it needs GPUs to run)."""
+"""train.sh evaluates with the shared protocol; the checks read the script text, because running it needs GPUs."""
 
 import re
 import shutil
