@@ -115,3 +115,24 @@ def test_the_training_envs_success_rate_is_not_logged_under_an_eval_key(train_ru
     logged_keys = {key for update in train_run.logger.updates for key in update}
     assert not {key for key in logged_keys if key.startswith("eval/")}  # evaluate() is faked to log nothing
     assert {"train/success_2cm", "train/success_5cm"} <= logged_keys
+
+
+def saved_steps(train_run) -> list[str]:
+    run_dirs = list((train_run.directory / "models").glob("*/*/*/*/seed*"))
+    assert len(run_dirs) == 1
+    return sorted(path.name for path in run_dirs[0].glob("step*"))
+
+
+def test_the_final_step_is_saved_although_it_is_not_a_multiple_of_the_interval(train_run):
+    train_run.run([])
+    assert saved_steps(train_run) == sorted(["step5", "step10", f"step{NUM_INTERACTION_STEPS}"])
+
+
+def test_a_final_step_on_the_interval_is_saved_once(train_run):
+    train_run.run([f"save_checkpoint_per_interaction_step={NUM_INTERACTION_STEPS}"])
+    assert saved_steps(train_run) == [f"step{NUM_INTERACTION_STEPS}"]
+
+
+def test_the_final_step_is_saved_without_a_checkpoint_interval(train_run):
+    train_run.run(["save_checkpoint_per_interaction_step=null"])
+    assert saved_steps(train_run) == [f"step{NUM_INTERACTION_STEPS}"]
