@@ -56,7 +56,8 @@ def test_short_training_run(genesis_cpu, isolated_hand_cfgs, tmp_path):
     floors = [{k: v for k, v in m.items() if k.startswith("eval/floor/")} for m in evaluations]
     assert floors[0] == floors[1]
     final_trajectory = run_dir / "eval_trajectories" / "trajectory_step_32.npz"
-    assert sorted(p.name for p in final_trajectory.parent.iterdir()) == ["trajectory_step_16.npz", final_trajectory.name]
+    saved = sorted(p.name for p in final_trajectory.parent.iterdir())
+    assert saved == ["trajectory_step_16.npz", final_trajectory.name]
     assert score(load_trajectory(final_trajectory)).auc_add == last["eval/auc_add"]
     for name in ("final.pt", "best.pt", "step_16.pt"):
         assert (run_dir / "checkpoints" / name).exists()
