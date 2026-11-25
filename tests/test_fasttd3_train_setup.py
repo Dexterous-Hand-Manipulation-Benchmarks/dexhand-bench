@@ -4,7 +4,7 @@ The run seed must decide the agent's initial state: building a DexMachina env re
 with a fixed seed (curriculum, ADD vertex sampling), and FastTD3 builds two envs (train, eval) before its
 actor. The fake env here reseeds in every construction, like the real one.
 The run must save the env it trains on next to its checkpoints, for evaluation to rebuild.
-The run has W&B off, so train.py's env-config logging is skipped.
+The runs have W&B off (train.py's env-config logging is skipped), except where a test passes a W&B stand-in.
 The networks training starts from are pinned by a golden fixture, so refactoring how train.py builds them cannot change
 training. Record it deliberately, on purpose-made changes only (a torch bump changes it too), always all cases:
     FASTTD3_RECORD_GOLDEN=1 uv run --exact --extra fasttd3 pytest tests/test_fasttd3_train_setup.py -k golden
@@ -16,6 +16,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -66,6 +67,8 @@ class Captured(Exception):
 class ReseedingEnv(FakeDexEnv):
     def __init__(self, seed: int) -> None:
         super().__init__()
+        # train.py logs the reward config to W&B.
+        self.reward_module = SimpleNamespace(cfg={})
         np.random.seed(seed)
         torch.manual_seed(seed)
 
@@ -104,7 +107,10 @@ def train_setup(monkeypatch, tmp_path):
 
     run_dirs = itertools.count()
 
-    def run(agent: str, run_seed: int, env_reseed: int, extra_args: tuple[str, ...] = (), stop_at: str = "actor"):
+    def run(
+        agent: str, run_seed: int, env_reseed: int, extra_args: tuple[str, ...] = (), stop_at: str = "actor",
+        wandb_stand_in=None,
+    ):
         """Runs train.main() until it builds the actor (returns its state), until the replay buffer (returns every
         (role, module) the actor and critic classes built, in order), or to the end (returns the working directory)."""
         # train.py writes its run files under models/ in the working directory, named by the second it starts in.
@@ -142,9 +148,11 @@ def train_setup(monkeypatch, tmp_path):
         monkeypatch.setattr(dexmachina_env, "build_dexmachina_envs", build_envs)
         monkeypatch.setattr(sys, "argv", [
             "train.py", "--env_name", ENV_NAME, "--agent", agent,
-            "--seed", str(run_seed), "--num_envs", str(NUM_ENVS), "--no_cuda", "--no_use_wandb", "--no_compile",
-            *extra_args,
+            "--seed", str(run_seed), "--num_envs", str(NUM_ENVS), "--no_cuda", "--no_compile",
+            *(("--no_use_wandb",) if wandb_stand_in is None else ()), *extra_args,
         ])
+        if wandb_stand_in is not None:
+            monkeypatch.setattr(train, "wandb", wandb_stand_in)
         if stop_at == "end":
             train.main()
             return work_dir
@@ -275,3 +283,46 @@ def test_step_checkpoints_are_named_after_and_store_the_iterations_done(
     step_files = {name: step for name, step in saved.items() if name.startswith("step")}
     assert step_files == expected_step_files
     assert saved["final.pt"] == total
+
+
+def wandb_run(mode: str, project="a-project", entity="an-entity") -> SimpleNamespace:
+    """The attributes train.py reads from wandb.run, as W&B sets them in each mode."""
+    return SimpleNamespace(
+        id="run-id", project=project, entity=entity, offline=mode == "offline", disabled=mode == "disabled"
+    )
+
+
+class WandbStandIn:
+    """What train.py uses of the wandb module before it builds the actor."""
+
+    def __init__(self, mode: str) -> None:
+        self.mode = mode
+        self.run = None
+        self.config = SimpleNamespace(update=lambda *args, **kwargs: None)
+
+    def init(self, project, entity=None, **_):
+        self.run = wandb_run(self.mode, project, entity)
+        return self.run
+
+
+# Offline and disabled runs pass without the change too: they only guard that no file is written for them.
+@pytest.mark.parametrize("mode", ["online", "offline", "disabled"])
+def test_the_run_records_its_wandb_run_next_to_its_checkpoints_when_online(train_setup, tmp_path, mode):
+    train_setup(
+        "fasttd3", run_seed=3, env_reseed=42, wandb_stand_in=WandbStandIn(mode),
+        extra_args=("--project", "a-project", "--entity", "an-entity"),
+    )
+    saved_files = list(tmp_path.glob("run*/models/FastTD3/*/*/wandb_run.json"))
+    if mode == "online":
+        (saved,) = saved_files
+        assert json.loads(saved.read_text()) == {"id": "run-id", "project": "a-project", "entity": "an-entity"}
+    else:
+        assert saved_files == []
+
+
+def test_a_recorded_wandb_run_is_never_replaced_and_an_unset_entity_is_null(train_setup, tmp_path):
+    save_wandb_run = importlib.import_module("fast_td3_utils").save_wandb_run
+    save_wandb_run(tmp_path, wandb_run("online", entity=""))
+    assert json.loads((tmp_path / "wandb_run.json").read_text())["entity"] is None
+    with pytest.raises(FileExistsError, match="another W&B run"):
+        save_wandb_run(tmp_path, wandb_run("online"))
