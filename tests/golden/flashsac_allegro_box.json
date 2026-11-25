@@ -9,8 +9,8 @@
     "env/keypoint_dist",
     "env/pos_dist",
     "env/rot_dist",
-    "eval/success_2cm",
-    "eval/success_5cm"
+    "train/success_2cm",
+    "train/success_5cm"
   ],
   "env_kwargs": {
     "env_type": "dexmachina",
