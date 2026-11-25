@@ -121,10 +121,12 @@ def test_envs_resample_their_exploration_noise_on_different_steps(train):
     assert not np.array_equal(resampled_per_env[0], resampled_per_env[1])
 
 
-def test_the_dexmachina_env_is_built_with_the_runs_seed(train, monkeypatch):
+def test_the_dexmachina_env_is_built_with_the_runs_seed(train: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     seeds: list[int] = []
 
-    def fake_make_dexmachina_env(num_envs, device, hydra_kwargs, seed, env_name):
+    def fake_make_dexmachina_env(
+        num_envs: int, device: str, hydra_kwargs: Any, seed: int, env_name: str
+    ) -> Any:
         seeds.append(seed)
         return FakeDexVecEnv(FakeDexEnv())
 
