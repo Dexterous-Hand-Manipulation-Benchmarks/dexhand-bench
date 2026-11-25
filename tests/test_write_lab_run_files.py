@@ -7,6 +7,7 @@ the two mixer clips only appear in the run names. The action mode is residual (t
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,8 +27,11 @@ lab = importlib.util.module_from_spec(module_spec)
 sys.modules[module_spec.name] = lab
 module_spec.loader.exec_module(lab)
 
-EXPORT = Path(__file__).parents[1] / "notes/wandb_runs.json"
-CHECKPOINTS = Path(__file__).parents[1] / "notes/measurements/bridge_eval/ckpt"
+# The local checks need data that is not in the repository: the W&B export of the lab runs and their checkpoints.
+EXPORT_VARIABLE = "DEXHAND_LAB_WANDB_EXPORT"
+CHECKPOINTS_VARIABLE = "DEXHAND_LAB_CHECKPOINTS"
+EXPORT = Path(os.environ.get(EXPORT_VARIABLE, ""))
+CHECKPOINTS = Path(os.environ.get(CHECKPOINTS_VARIABLE, ""))
 SEEDS = (0, 1000, 2000)
 # (hand, clip, first frame, last frame): the clip's frames are the 200 steps of the report's table (150 for mixer).
 LAB_CLIPS = (
@@ -277,9 +281,9 @@ def test_two_runs_with_one_name_raise(tmp_path: Path) -> None:
         lab.lab_runs(export)
 
 
-@pytest.mark.skipif(not EXPORT.is_file(), reason="needs the local W&B export")
+@pytest.mark.skipif(not EXPORT.is_file(), reason=f"needs the local W&B export in ${EXPORT_VARIABLE}")
 def test_the_export_has_the_18_lab_runs_with_their_names() -> None:
-    """Runs only where the git-ignored W&B export exists (a local check against the real runs)."""
+    """Runs only where the W&B export exists (a local check against the real runs)."""
     runs = lab.lab_runs(EXPORT)
     assert sorted(runs) == sorted(run_name(hand, clip, seed) for hand, clip, _, _, seed in LAB_RUNS)
     for name, run in runs.items():
@@ -302,14 +306,16 @@ def _flashsac_eval_module() -> Any:
     return module
 
 
-@pytest.mark.skipif(not (EXPORT.is_file() and CHECKPOINTS.is_dir()), reason="needs the local export and checkpoints")
+@pytest.mark.skipif(
+    not (EXPORT.is_file() and CHECKPOINTS.is_dir()), reason=f"needs ${EXPORT_VARIABLE} and ${CHECKPOINTS_VARIABLE}"
+)
 def test_reconstructed_files_load_and_act_like_the_lab_evaluation_loader(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Local check on allegro box seed 0: the agent built from the written config acts as the bridging eval's loader.
 
     The reference loader strips the `_orig_mod.` prefix (the lab checkpoints were saved from torch.compile'd networks)
-    and runs eager, as notes/measurements/bridge_eval/eval_wrapper.py does.
+    and runs eager, as the lab's bridging evaluation does.
     """
     import torch
 
