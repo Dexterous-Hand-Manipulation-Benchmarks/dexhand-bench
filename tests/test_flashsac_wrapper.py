@@ -51,8 +51,8 @@ def test_success_metrics_are_the_env_success_rates():
     raw.success = {"success_2cm": torch.tensor([True, False]), "success_5cm": torch.tensor([True, True])}
     env.reset()
     *_, infos = env.step(torch.zeros(2, 2))
-    assert infos["eval/success_2cm"] == 0.5
-    assert infos["eval/success_5cm"] == 1.0
+    assert infos["train/success_2cm"] == 0.5
+    assert infos["train/success_5cm"] == 1.0
     assert math.isclose(infos["env/pos_dist"], raw.dist["pos_dist"], rel_tol=1e-6)
 
 
@@ -61,7 +61,7 @@ def test_tracking_errors_report_every_metric_dexmachina_provides():
     rew_dict = {key: torch.tensor([0.0, 1.0]) for key in distances}
     rew_dict.update({key: torch.tensor([True, False]) for key in ("success_2cm", "success_5cm")})
     means = flash_dex.TrackingErrors.from_rew_dict(rew_dict).log_means()
-    expected_names = {"eval/success_2cm", "eval/success_5cm"} | {f"env/{key}" for key in distances}
+    expected_names = {"train/success_2cm", "train/success_5cm"} | {f"env/{key}" for key in distances}
     assert means == {name: 0.5 for name in expected_names}
 
 

@@ -10,7 +10,7 @@ import pytest
 from fakes import FakeDexEnv, FakeDexVecEnv
 
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
-pytest.importorskip("hydra")
+GlobalHydra = pytest.importorskip("hydra.core.global_hydra").GlobalHydra
 
 FLASHSAC_DIR = Path(__file__).parents[1] / "algorithms/FlashSAC"
 NUM_ENVS = 2
@@ -69,13 +69,15 @@ class TrainRun:
         self.directory = directory
 
     def run(self, extra_overrides: list[str]) -> None:
+        GlobalHydra.instance().clear()
         overrides = [*TINY_RUN_OVERRIDES, *extra_overrides]
         args = self.module.argparse.Namespace(config_path="./configs", config_name="flashSAC_base", overrides=overrides)
         self.module.run(args)
 
 
 @pytest.fixture
-def train_run(monkeypatch, tmp_path):
+def train_run(monkeypatch, tmp_path, request):
+    request.addfinalizer(GlobalHydra.instance().clear)  # train.py leaves Hydra initialised
     monkeypatch.setattr("torch._dynamo.config.disable", True)
     spec = importlib.util.spec_from_file_location("flashsac_train", FLASHSAC_DIR / "train.py")
     assert spec is not None and spec.loader is not None
@@ -106,3 +108,10 @@ def test_episode_info_enters_the_averages_once_per_step(train_run):
     train_run.run([])
     logged = [update for update in train_run.logger.updates if EPISODE_INFO.keys() <= update.keys()]
     assert len(logged) == NUM_INTERACTION_STEPS
+
+
+def test_the_training_envs_success_rate_is_not_logged_under_an_eval_key(train_run):
+    train_run.run([])
+    logged_keys = {key for update in train_run.logger.updates for key in update}
+    assert not {key for key in logged_keys if key.startswith("eval/")}  # evaluate() is faked to log nothing
+    assert {"train/success_2cm", "train/success_5cm"} <= logged_keys
