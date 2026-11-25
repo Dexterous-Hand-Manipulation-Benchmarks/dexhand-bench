@@ -37,6 +37,6 @@
     "seed": 0,
     "rl_device": "cpu"
   },
-  "obs_dim": 410,
+  "obs_dim": 510,
   "action_dim": 44
 }

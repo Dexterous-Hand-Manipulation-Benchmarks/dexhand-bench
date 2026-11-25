@@ -17,6 +17,7 @@ import torch
 pytest.importorskip("dexmachina.envs.base_env", reason="needs genesis and dexmachina")
 import dexmachina.envs.vec_env as vec_env_module  # noqa: E402
 from dexmachina.envs.base_env import BaseEnv  # noqa: E402  (after the skip: needs dexmachina)
+from dexmachina.envs.benchmark_task import RunChoices, benchmark_spec  # noqa: E402
 from dexmachina.envs.maniptrans_curr import ManipTransCurriculum  # noqa: E402
 from dexmachina.envs.spec import EnvSpec  # noqa: E402
 from dexmachina.envs.vec_env import AUTORESET_SAME_STEP, DexMachinaVecEnv  # noqa: E402
@@ -401,22 +402,15 @@ def test_from_spec_keeps_the_spec_and_reward_overrides(monkeypatch: pytest.Monke
     assert vec.reward_overrides == {"force_penalty": 0.1}
 
 
-GOLDEN_REWARD_OVERRIDES = {"force_penalty": 0.1, "task_rew_weight": 1.0, "bc_wrist_weight": 0.25}
 GOLDEN_CLIP = "box-30-230-s01-01"
 
 
 def _golden_vec_env(meta: dict[str, Any], reseed: Any) -> DexMachinaVecEnv:
-    from conftest import flashsac_env_kwargs
-
-    max_epochs = flashsac_env_kwargs(meta["env_kwargs"])["max_epochs"]
-    spec = replace(
-        EnvSpec(), num_envs=meta["num_envs"], seed=meta["seed"], max_epochs=max_epochs, hand="allegro_hand",
-        clip=GOLDEN_CLIP, retarget_name="para", actuate_object=True, use_rl_games=True,
-        task_rew_betas=(10.0, 1.0, 5.0), action_penalty=0.01, imi_rew_weight=0.3, imi_wrist_weight=0.5,
-        contact_rew_weight=3.0, contact_beta=10.0, bc_rew_weight=0.3, bc_beta=500.0, use_retarget_contact=True,
-    )  # fmt: skip
+    spec = benchmark_spec(
+        RunChoices(hand=meta["env_kwargs"]["hand"], clip=GOLDEN_CLIP, seed=meta["seed"], num_envs=meta["num_envs"])
+    )
     reseed(meta["seed"])
-    return DexMachinaVecEnv.from_spec(spec, "cpu", GOLDEN_REWARD_OVERRIDES)
+    return DexMachinaVecEnv.from_spec(spec, "cpu", {})
 
 
 @pytest.mark.sim
