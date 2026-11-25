@@ -15,7 +15,6 @@ import itertools
 import json
 import os
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -24,16 +23,14 @@ import torch
 
 from conftest import CURRENT_PLATFORM, GOLDEN_DIR
 from fakes import FakeDexEnv, FakeDexVecEnv
+from fasttd3_flat import flat_imports, load_script
 
 pytest.importorskip("fast_td3.environments.dexmachina_env", reason="needs the fasttd3 extra")
 genesis = pytest.importorskip("genesis")
 
-FASTTD3_DIR = Path(__file__).parents[1] / "algorithms/FastTD3/fast_td3"
 ENV_NAME = "dexmachina|allegro_hand|box-30-230"
 NUM_ENVS = 2
 ACTOR_MODULES = {"fasttd3": "fast_td3", "fasttd3_simbav2": "fast_td3_simbav2"}
-# train.py imports these flat from its own directory; the installed fast_td3 package would shadow fast_td3.py.
-FLAT_MODULES = ("fast_td3", "fast_td3_simbav2", "fast_td3_utils", "hyperparams", "environments", "agent_builders")
 
 
 INITIAL_NETWORKS_FILE = GOLDEN_DIR / "fasttd3_initial_networks.json"
@@ -91,16 +88,16 @@ def make_reseeding_envs_builder(dexmachina_env, seed: int):
 
 @pytest.fixture
 def train_setup(monkeypatch, tmp_path):
-    # train.py sets env vars at import and pulls its flat modules into sys.modules; undo both afterwards.
+    # train.py sets env vars at import; undo them afterwards.
     environ_before = dict(os.environ)
-    modules_before = set(sys.modules)
-    monkeypatch.syspath_prepend(str(FASTTD3_DIR))
-    for name in FLAT_MODULES:
-        monkeypatch.delitem(sys.modules, name, raising=False)
-    spec = importlib.util.spec_from_file_location("fasttd3_train", FASTTD3_DIR / "train.py")
-    assert spec is not None and spec.loader is not None
-    train = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(train)
+    with flat_imports(monkeypatch):
+        train = load_script("train")
+        yield from _train_runner(train, monkeypatch, tmp_path)
+    os.environ.clear()
+    os.environ.update(environ_before)
+
+
+def _train_runner(train, monkeypatch, tmp_path):
     monkeypatch.setattr(train, "UniversalLogger", None)
     monkeypatch.setattr(genesis, "init", lambda **_: None)
     dexmachina_env = importlib.import_module("environments.dexmachina_env")
@@ -164,11 +161,6 @@ def train_setup(monkeypatch, tmp_path):
         return captured.value.args[0]
 
     yield run
-    os.environ.clear()
-    os.environ.update(environ_before)
-    for name in set(sys.modules) - modules_before:
-        if name.split(".")[0] in FLAT_MODULES:
-            del sys.modules[name]
 
 
 def same_state(a: dict[str, torch.Tensor], b: dict[str, torch.Tensor]) -> bool:

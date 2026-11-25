@@ -42,11 +42,13 @@ jobs:
       SILENT_FAILURE_RULES: BLE001,S110,S112,E722
     steps:
       - uses: actions/checkout@v7
-      - run: git submodule update --init algorithms/FlashSAC environments/dexmachina
+      - run: git submodule update --init algorithms/FlashSAC algorithms/FastTD3 environments/dexmachina
       - uses: astral-sh/setup-uv@v10.3.3
       - run: >-
           uv run --frozen --only-dev ruff check --config pyproject.toml --select $SILENT_FAILURE_RULES
           src scripts tests
+          algorithms/FastTD3/fast_td3/eval_dexmachina.py
+          algorithms/FastTD3/fast_td3/agent_builders.py
           algorithms/FlashSAC/eval_dexmachina.py
           algorithms/FlashSAC/check_curriculum.py
           algorithms/FlashSAC/flash_rl/envs/dexmachina.py

@@ -10,6 +10,18 @@ cd "${DHB_ROOT}/algorithms/FastTD3" || exit 1
 
 echo "[INFO] Running from directory: $(pwd)"
 
+# Scores one checkpoint on the shared benchmark protocol and logs it into the run's W&B run. A failure stops the
+# script: a reported number must not go missing silently.
+evaluate_checkpoint() {
+    echo "[INFO] Evaluating checkpoint: $1"
+    python fast_td3/eval_dexmachina.py --checkpoint "$1" --wandb || {
+        echo "[ERROR] Evaluating $1 failed. To evaluate only it again, from algorithms/FastTD3 (first delete the" >&2
+        echo "        benchmark_trajectory_* file next to it if this attempt wrote one):" >&2
+        echo "        python fast_td3/eval_dexmachina.py --checkpoint $1 --wandb" >&2
+        exit 1
+    }
+}
+
 # --- Algorithm Selection ---
 # Choose: "fasttd3_simbav2" (FastTD3 + SimbaV2, recommended) or "fasttd3" (plain FastTD3)
 AGENT="fasttd3_simbav2"
@@ -46,7 +58,7 @@ for seed in "${seeds[@]}"; do
 
             run_exp_name="${hand}_${clip}_seed${seed}"
             NUM_TRAIN_ENVS=2048
-            TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) #65104
+            TOTAL_TIMESTEPS=$((50000000 / NUM_TRAIN_ENVS)) # 24414 iterations
             SAVE_INTERVAL=$((TOTAL_TIMESTEPS / 2))
             EVAL_INTERVAL=$((TOTAL_TIMESTEPS / 4))
             BUFFER_SIZE=8192
@@ -104,65 +116,34 @@ for seed in "${seeds[@]}"; do
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
-            # 2. RUN EVALUATION & RENDERING FOR ALL SAVED CHECKPOINTS
-            echo "[START] Evaluating & Rendering all step milestones for: $run_exp_name"
-
-            # Auto-detect the exact WandB Run ID created by the training script
-            LATEST_WANDB_DIR=$(ls -td wandb/*run-* 2>/dev/null | head -n 1)
-            if [ -n "$LATEST_WANDB_DIR" ]; then
-                WANDB_RUN_ID=$(basename "$LATEST_WANDB_DIR" | awk -F'-' '{print $NF}')
-                WANDB_ARG="--wandb_run_id ${WANDB_RUN_ID}"
-                echo "[INFO] Linking videos & metrics to WandB Run ID: ${WANDB_RUN_ID}"
-            else
-                WANDB_ARG=""
-                echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
-            fi
+            # 2. EVALUATE EVERY CHECKPOINT OF THIS RUN ON THE SHARED BENCHMARK PROTOCOL
+            echo "[START] Evaluating the checkpoints of: $run_exp_name"
 
             # Target ONLY the latest timestamp directory from this specific run
             RUN_PATH="models/FastTD3/${run_exp_name}"
             LATEST_TS_DIR=$(ls -td "${RUN_PATH}"/*/ 2>/dev/null | head -n 1)
 
             if [ -z "$LATEST_TS_DIR" ]; then
-                echo "[WARNING] No checkpoint directory found in ${RUN_PATH}. Skipping evaluation."
-                continue
+                echo "[ERROR] No checkpoint directory found in ${RUN_PATH}: training of ${run_exp_name} wrote none." >&2
+                exit 1
             fi
-
-            echo "[INFO] Evaluating checkpoints from: ${LATEST_TS_DIR}"
-
-            # 1. Evaluate intermediate step checkpoints sorted in chronological order
-            STEP_CKPTS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type f -name "step*.pt" 2>/dev/null | sort -V)
-
-            for CKPT in $STEP_CKPTS; do
-                STEP_NUM=$(basename "$CKPT" .pt | sed 's/step//')
-                ENV_STEP=$(( STEP_NUM * NUM_TRAIN_ENVS ))
-                echo "[INFO] Evaluating intermediate checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
-
-                python fast_td3/eval_dexmachina.py \
-                    --checkpoint "$CKPT" \
-                    --num_envs 20 \
-                    --env_name "dexmachina|${hand}|${clip}" \
-                    --record_video \
-                    ${WANDB_ARG} \
-                    --step "${ENV_STEP}"
-            done
-
-            # 2. Evaluate the final checkpoint; the reported score. best.pt is never evaluated: it is picked on a
-            # training diagnostic, so its score would be selection-biased.
             FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
             if [ ! -f "$FINAL_CKPT" ]; then
                 echo "[ERROR] ${FINAL_CKPT} is missing: training of ${run_exp_name} did not finish." >&2
                 exit 1
             fi
-            TOTAL_ENV_STEPS=$(( TOTAL_TIMESTEPS * NUM_TRAIN_ENVS ))
-            echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
 
-            python fast_td3/eval_dexmachina.py \
-                --checkpoint "$FINAL_CKPT" \
-                --num_envs 20 \
-                --env_name "dexmachina|${hand}|${clip}" \
-                --record_video \
-                ${WANDB_ARG} \
-                --step "${TOTAL_ENV_STEPS}"
+            echo "[INFO] Evaluating checkpoints from: ${LATEST_TS_DIR}"
+
+            # 1. Intermediate step checkpoints, in training order
+            STEP_CKPTS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type f -name "step*.pt" 2>/dev/null | sort -V)
+            for CKPT in $STEP_CKPTS; do
+                evaluate_checkpoint "$CKPT"
+            done
+
+            # 2. The final checkpoint: the reported score. best.pt is never evaluated: it is picked on a training
+            # diagnostic, so its score would be selection-biased.
+            evaluate_checkpoint "$FINAL_CKPT"
 
             echo "[SUCCESS] All milestone evaluations completed for $run_exp_name"
             echo "--------------------------------------------------------"

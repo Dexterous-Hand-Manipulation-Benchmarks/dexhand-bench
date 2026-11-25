@@ -1,16 +1,14 @@
 #!/bin/bash
 ##################################################################################
 # Dexmachina (Genesis GPU Simulator + FastTD3 Smoke Test)
-# Runs a quick 200-step training + evaluation rollout to verify:
+# Runs a quick 200-step training and the benchmark evaluation of its checkpoints, to verify:
 #   1. UniversalLogger metric interception & WandB syncing
-#   2. Checkpoint creation
-#   3. Automated ADD / AUC-ADD computation
-#   4. Video rendering and upload to WandB
+#   2. Checkpoint creation, with env_spec.json and wandb_run.json next to them
+#   3. The shared benchmark evaluation, logged into the training run
 ##################################################################################
 
 set -e
 
-# --- Auto-activate Conda Environment ---
 DHB_EXTRA=fasttd3
 source "$(dirname "$0")/../common.sh"
 
@@ -52,19 +50,8 @@ python fast_td3/train.py \
 
 echo "[SUCCESS] Smoke test training completed for $run_exp_name"
 
-# 2. RUN EVALUATION & RENDERING FOR SAVED CHECKPOINTS
-echo "[START] Evaluating & Rendering checkpoints for: $run_exp_name"
-
-# Auto-detect the exact WandB Run ID created by the training script
-LATEST_WANDB_DIR=$(ls -td wandb/*run-* 2>/dev/null | head -n 1)
-if [ -n "$LATEST_WANDB_DIR" ]; then
-    WANDB_RUN_ID=$(basename "$LATEST_WANDB_DIR" | awk -F'-' '{print $NF}')
-    WANDB_ARG="--wandb_run_id ${WANDB_RUN_ID}"
-    echo "[INFO] Linking videos & metrics to WandB Run ID: ${WANDB_RUN_ID}"
-else
-    WANDB_ARG=""
-    echo "[WARNING] Could not detect recent WandB run. Videos will not sync to the cloud."
-fi
+# 2. EVALUATE THE SAVED CHECKPOINTS ON THE SHARED BENCHMARK PROTOCOL
+echo "[START] Evaluating the checkpoints of: $run_exp_name"
 
 # Target ONLY the latest timestamp directory from this test run
 RUN_PATH="models/FastTD3/${run_exp_name}"
@@ -77,37 +64,12 @@ fi
 
 echo "[INFO] Evaluating checkpoints from: ${LATEST_TS_DIR}"
 
-# 1. Evaluate intermediate step checkpoints
+# Step checkpoints in training order, then final.pt
 STEP_CKPTS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type f -name "step*.pt" 2>/dev/null | sort -V)
-
-for CKPT in $STEP_CKPTS; do
-    STEP_NUM=$(basename "$CKPT" .pt | sed 's/step//')
-    ENV_STEP=$(( STEP_NUM * 64 ))
-    echo "[INFO] Evaluating checkpoint: ${CKPT} (Env Step: ${ENV_STEP})"
-
-    python fast_td3/eval_dexmachina.py \
-        --checkpoint "$CKPT" \
-        --num_envs 20 \
-        --env_name "dexmachina|${hand}|${clip}" \
-        --record_video \
-        ${WANDB_ARG} \
-        --step "${ENV_STEP}"
+for CKPT in $STEP_CKPTS "${LATEST_TS_DIR}/final.pt"; do
+    echo "[INFO] Evaluating checkpoint: ${CKPT}"
+    python fast_td3/eval_dexmachina.py --checkpoint "$CKPT" --wandb
 done
-
-# 2. Evaluate final checkpoint
-if [ -f "${LATEST_TS_DIR}/final.pt" ]; then
-    FINAL_CKPT="${LATEST_TS_DIR}/final.pt"
-    TOTAL_ENV_STEPS=$(( 200 * 64 ))
-    echo "[INFO] Evaluating final checkpoint: ${FINAL_CKPT} (Env Step: ${TOTAL_ENV_STEPS})"
-
-    python fast_td3/eval_dexmachina.py \
-        --checkpoint "$FINAL_CKPT" \
-        --num_envs 20 \
-        --env_name "dexmachina|${hand}|${clip}" \
-        --record_video \
-        ${WANDB_ARG} \
-        --step "${TOTAL_ENV_STEPS}"
-fi
 
 echo "========================================================"
 echo "[SUCCESS] FastTD3 Smoke Test completed successfully!"
