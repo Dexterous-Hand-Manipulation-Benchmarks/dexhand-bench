@@ -36,7 +36,10 @@ from typing import Any, cast
 from dexmachina.envs.constructors import (
     parse_clip_string,  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 )
-from dexmachina.envs.rewards import get_reward_cfg  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
+from dexmachina.envs.rewards import (  # pyright: ignore[reportMissingTypeStubs]
+    OPTIONAL_REWARD_KEYS,  # pyright: ignore[reportUnknownVariableType]
+    get_reward_cfg,  # pyright: ignore[reportUnknownVariableType]
+)
 from dexmachina.envs.run_spec import (  # pyright: ignore[reportMissingTypeStubs]
     DIFF_KEY,
     DIRTY_KEY,
@@ -49,7 +52,6 @@ from dexmachina.envs.spec import EnvSpec  # pyright: ignore[reportMissingTypeStu
 from omegaconf import OmegaConf
 
 from flash_rl.envs.dexmachina import (  # pyright: ignore[reportMissingTypeStubs]
-    EXTRA_REWARD_KEYS,
     RUN_CONFIG_FILENAME,
     DexmachinaEnvConfig,
     full_clip_id,
@@ -245,7 +247,7 @@ def lab_spec(
     rewards = config.reward_overrides
     if rewards is not None:
         known_keys = set(cast(Mapping[str, Any], get_reward_cfg()))
-        unknown_keys = sorted(set(rewards) - known_keys - EXTRA_REWARD_KEYS)
+        unknown_keys = sorted(set(rewards) - known_keys - OPTIONAL_REWARD_KEYS)
         if unknown_keys:
             raise ValueError(f"unknown reward_cfg keys: {unknown_keys}")
         spec_field_names = {f.name for f in fields(EnvSpec)}
