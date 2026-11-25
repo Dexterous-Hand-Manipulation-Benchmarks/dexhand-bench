@@ -19,5 +19,10 @@ export DHB_ROOT DHB_EXTRA
 
 # W&B entity/project from configs/default.yaml + configs/local.yaml.
 # WANDB_ENTITY / WANDB_PROJECT already set in the environment take precedence.
-eval "$(uv run --project "${DHB_ROOT}" --exact --extra "${DHB_EXTRA}" dexhand-bench env)"
+DHB_ENV_EXPORTS="$(uv run --project "${DHB_ROOT}" --exact --extra "${DHB_EXTRA}" dexhand-bench env)" || {
+    echo "[ERROR] 'dexhand-bench env' failed (error above): the W&B settings are unknown, and a run would go to the" >&2
+    echo "        wrong project or start with an empty --wandb_project. Fix the uv environment or configs/*.yaml." >&2
+    exit 1
+}
+eval "${DHB_ENV_EXPORTS}"
 echo "[INFO] uv environment: ${DHB_EXTRA} | W&B: ${WANDB_ENTITY:-<default entity>}/${WANDB_PROJECT}"
