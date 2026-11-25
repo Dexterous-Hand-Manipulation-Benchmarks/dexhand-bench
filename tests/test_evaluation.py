@@ -9,18 +9,23 @@ import pytest
 import torch
 
 pytest.importorskip("dexmachina.envs.evaluation", reason="needs genesis and dexmachina")
+import dexmachina.envs.evaluation as evaluation  # noqa: E402
 from dexmachina.envs.add_metric import ADD_PARTS, ADDMetric  # noqa: E402  (after the skip: needs dexmachina)
 from dexmachina.envs.evaluation import (  # noqa: E402
     NEVER_NAN,
     PART_AGGREGATIONS,
+    BenchmarkEvaluation,
     EvalRecorder,
+    EvalScore,
     StepRecord,
     Trajectory,
+    checked_dexmachina_state,
     load_trajectory,
     paired_demo_frame,
     save_trajectory,
     score,
 )
+from dexmachina.envs.run_spec import DexmachinaState  # noqa: E402
 
 NUM_FRAMES = 10
 TOP, BOTTOM = ADD_PARTS.index("top"), ADD_PARTS.index("bottom")
@@ -304,3 +309,65 @@ def test_a_saved_trajectory_is_never_overwritten(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError, match="exists already"):
         save_trajectory(path, _trajectory(_constant_add(0.05, 0.05, steps=2)))
     assert load_trajectory(path).add.max() == 0.01
+
+
+SAVED_STATE = DexmachinaState("a" * 40, False, None)
+EVALUATED_STATE = DexmachinaState("b" * 40, True, "0" * 64)
+# What FlashSAC logged before the record moved into dexmachina; every method logs these names.
+BENCHMARK_METRIC_KEYS = {
+    "benchmark/auc_add", "benchmark/auc_add_of_mean", "benchmark/mean_add", "benchmark/success_2cm",
+    "benchmark/success_5cm", "benchmark/nan_rate", "benchmark/drop_rate", "benchmark/floor/auc_add",
+    "benchmark/checkpoint_step", "benchmark/env_step", "benchmark/auc_add_part/top", "benchmark/auc_add_part/bottom",
+}
+BENCHMARK_PROVENANCE_KEYS = {
+    "benchmark/task_hash", "benchmark/eval_seed",
+    "benchmark/dexmachina_sha/saved", "benchmark/dexmachina_sha/evaluated",
+    "benchmark/dexmachina_dirty/saved", "benchmark/dexmachina_dirty/evaluated",
+    "benchmark/dexmachina_diff_sha256/saved", "benchmark/dexmachina_diff_sha256/evaluated",
+}
+
+
+def _benchmark_evaluation() -> BenchmarkEvaluation:
+    result = EvalScore(
+        auc_add=0.5, auc_add_of_mean=0.4, auc_add_part={"top": 0.6, "bottom": 0.4}, mean_add=0.01,
+        success_2cm=0.3, success_5cm=0.7, nan_rate=0.0, drop_rate=0.5,
+    )  # fmt: skip
+    return BenchmarkEvaluation(
+        eval_score=result, task_hash="t", saved_state=SAVED_STATE, evaluated_state=EVALUATED_STATE,
+        floor=replace(result, auc_add=0.1), checkpoint_step=3, env_step=6, eval_seed=0,
+    )  # fmt: skip
+
+
+def test_the_benchmark_keys_are_the_ones_every_method_logs():
+    evaluation_record = _benchmark_evaluation()
+    metrics = evaluation_record.metrics()
+    assert set(metrics) == BENCHMARK_METRIC_KEYS
+    provenance = evaluation_record.provenance()
+    assert set(provenance) == BENCHMARK_PROVENANCE_KEYS
+    assert (metrics["benchmark/auc_add"], metrics["benchmark/floor/auc_add"]) == (0.5, 0.1)
+    assert (metrics["benchmark/auc_add_part/top"], metrics["benchmark/env_step"]) == (0.6, 6.0)
+    assert (provenance["benchmark/dexmachina_sha/saved"], provenance["benchmark/dexmachina_sha/evaluated"]) == (
+        SAVED_STATE.sha, EVALUATED_STATE.sha,
+    )
+    assert (provenance["benchmark/dexmachina_dirty/saved"], provenance["benchmark/dexmachina_dirty/evaluated"]) == (
+        False, True,
+    )
+    assert provenance["benchmark/dexmachina_diff_sha256/evaluated"] == EVALUATED_STATE.diff_sha256
+
+
+def test_a_different_dexmachina_commit_at_evaluation_is_warned_about(monkeypatch, capsys):
+    other = SAVED_STATE._replace(sha="b" * 40)
+    monkeypatch.setattr(evaluation, "current_dexmachina_state", lambda: other)
+    assert checked_dexmachina_state(SAVED_STATE, allow_dirty_dexmachina=False) == other
+    assert f"evaluated with {'b' * 12}" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("dirty_at", ["training", "evaluation"])
+def test_a_dirty_dexmachina_is_refused_unless_allowed(monkeypatch, capsys, dirty_at):
+    dirty = SAVED_STATE._replace(dirty=True, diff_sha256="0" * 64)
+    saved, evaluated = (dirty, SAVED_STATE) if dirty_at == "training" else (SAVED_STATE, dirty)
+    monkeypatch.setattr(evaluation, "current_dexmachina_state", lambda: evaluated)
+    with pytest.raises(RuntimeError, match=f"{dirty_at}: True.*--allow-dirty-dexmachina"):
+        checked_dexmachina_state(saved, allow_dirty_dexmachina=False)
+    assert checked_dexmachina_state(saved, allow_dirty_dexmachina=True) == evaluated
+    assert "Not for reported numbers" in capsys.readouterr().out

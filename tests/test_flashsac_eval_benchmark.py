@@ -21,6 +21,7 @@ create_agent = pytest.importorskip("flash_rl.agents").create_agent
 import dexmachina.envs.run_spec as run_spec  # noqa: E402
 from dexmachina.envs.evaluation import (  # noqa: E402  (after the skip: needs dexmachina)
     EVAL_SEED,
+    BenchmarkEvaluation,
     EvalScore,
     load_trajectory,
     score,
@@ -159,6 +160,19 @@ def test_the_logged_keys_stay_clear_of_the_ones_the_training_eval_logs():
     assert "eval/success_2cm" in emitted  # the derivation sees what it should avoid
     assert keys.isdisjoint(emitted)
     assert all(key.startswith(f"{PREFIX}/") for key in keys)
+
+
+def test_flashsac_logs_the_same_benchmark_keys_as_the_shared_record():
+    # FlashSAC still has its own copy of the record; until it switches to dexmachina's, the two must not drift.
+    # Every field differs from its neighbours, so a swapped field in either copy shows.
+    flashsac = replace(
+        _stub_evaluation(),
+        evaluated_state=DexmachinaState("b", True, "d"), checkpoint_step=2, env_step=4096, eval_seed=7,
+    )
+    assert type(flashsac) is not BenchmarkEvaluation, "FlashSAC uses the shared record now: delete this test"
+    shared = BenchmarkEvaluation(**{name: getattr(flashsac, name) for name in flashsac.__dataclass_fields__})
+    assert flashsac.metrics() == shared.metrics()
+    assert flashsac.provenance() == shared.provenance()
 
 
 def _stop_before_the_env(monkeypatch):
