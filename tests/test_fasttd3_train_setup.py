@@ -12,6 +12,7 @@ training. Record it deliberately, on purpose-made changes only (a torch bump cha
 import importlib.util
 import itertools
 import json
+import math
 import os
 import sys
 from types import SimpleNamespace
@@ -50,8 +51,10 @@ GOLDEN_CASES = {
         ("--sim_type", "sim_both", "--actor_seq_len", "4", "--critic_seq_len", "2", "--sim_dimension", "16"),
     ),
 }
-# Sums of float32 tensors in float64: equal bits give equal sums; another platform may round the init differently in
-# the last bit, which this tolerance absorbs while a different init or draw order is off by far more.
+# Sums of float32 tensors in float64: equal bits give equal sums. Another machine may round the init differently in the
+# last bits (orthogonal init goes through a QR decomposition), which these tolerances absorb, while a different init
+# or draw order is off by far more. A sum can cancel to near zero, so its tolerance is relative to the largest value
+# it could have, sqrt(numel * sumsq) (Cauchy-Schwarz), not to itself.
 STATS_RTOL = 1e-6
 OUTPUT_RTOL = 1e-5
 OUTPUT_ATOL = 1e-7
@@ -247,9 +250,13 @@ def test_golden_initial_networks_of_training(train_setup, case):
         for key, tensor_stats in stats.items():
             expected_tensor = expected_stats[key]
             assert tensor_stats["shape"] == expected_tensor["shape"], f"module {index} {key} shape"
-            assert (tensor_stats["sum"], tensor_stats["sumsq"]) == pytest.approx(
-                (expected_tensor["sum"], expected_tensor["sumsq"]), rel=STATS_RTOL
-            ), f"module {index} {key} {where}"
+            largest_sum = math.sqrt(math.prod(expected_tensor["shape"]) * expected_tensor["sumsq"])
+            assert tensor_stats["sum"] == pytest.approx(
+                expected_tensor["sum"], rel=0, abs=STATS_RTOL * largest_sum
+            ), f"module {index} {key} sum {where}"
+            assert tensor_stats["sumsq"] == pytest.approx(
+                expected_tensor["sumsq"], rel=STATS_RTOL
+            ), f"module {index} {key} sum of squares {where}"
     for output in ("actor_output", "critic_output"):
         torch.testing.assert_close(
             torch.tensor(fingerprint[output]), torch.tensor(expected[output]),
