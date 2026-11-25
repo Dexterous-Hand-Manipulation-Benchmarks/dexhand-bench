@@ -77,3 +77,6 @@ class FakeDexVecEnv:
         final_obs = torch.where(terminated[:, None], self._final_obs, observations["policy"])
         info = {"final_obs": final_obs, "log": {}}
         return observations["policy"].clone(), reward.clone(), terminated, torch.zeros_like(terminated), info
+
+    def close(self):
+        pass
