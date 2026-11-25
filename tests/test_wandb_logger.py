@@ -11,13 +11,19 @@ from dexhand_bench import wandb_logger
 from dexhand_bench.wandb_logger import UniversalLogger
 
 
+_IDENTITY_ATTRIBUTES = ("algo", "hand", "clip", "seed", "num_train_envs", "num_eval_envs")
+
+
 @pytest.fixture
 def logger():
     """Install the logger and undo its global wandb patches afterwards."""
     orig_init, orig_log = wandb.init, wandb.sdk.wandb_run.Run.log
+    orig_state = {name: getattr(UniversalLogger, name) for name in _IDENTITY_ATTRIBUTES}
     yield UniversalLogger
     wandb.init, wandb.sdk.wandb_run.Run.log = orig_init, orig_log
     UniversalLogger._installed = False
+    for name, value in orig_state.items():
+        setattr(UniversalLogger, name, value)
 
 
 def test_shim_exports_the_same_logger():
@@ -88,6 +94,33 @@ def test_standardize_config_adds_benchmark_keys(logger):
     assert cfg["algo"] == "FlashSAC" and cfg["benchmark/algo"] == "FlashSAC"
     assert (cfg["hand"], cfg["clip"], cfg["seed"]) == ("xhand", "mixer-0-150", 3)
     assert cfg["gamma"] == 0.97 and cfg["batch_size"] == 4096
+
+
+def test_standardize_config_logs_only_what_the_run_config_contains(logger):
+    logger.install(algo="reppo", hand="xhand", clip="c", seed=1, num_train_envs=64)
+    cfg = logger.standardize_config({"hyperparameters": {"num_mini_batches": 8, "lr": 1e-3}})
+    assert cfg["benchmark/learning_rate"] == 1e-3
+    for key in ("actor_hidden_dim", "critic_hidden_dim", "actor_blocks", "gamma", "batch_size", "use_amp"):
+        assert f"benchmark/{key}" not in cfg and key not in cfg
+
+
+def test_standardize_config_keeps_the_run_s_own_top_level_value(logger):
+    logger.install(algo="flash_sac", hand="h", clip="c", seed=1, num_train_envs=8)
+    cfg = logger.standardize_config({"gamma": 0.9, "agent": {"gamma": 0.8}})
+    assert cfg["gamma"] == 0.9
+    assert cfg["benchmark/gamma"] == 0.8
+
+
+def test_standardize_config_before_install_raises(logger):
+    for name in _IDENTITY_ATTRIBUTES:
+        setattr(logger, name, None)
+    with pytest.raises(RuntimeError, match=r"install\(\) has not been called"):
+        logger.standardize_config({})
+
+
+def test_install_rejects_unknown_keyword(logger):
+    with pytest.raises(TypeError, match="num_trian_envs"):
+        logger.install(algo="flash_sac", hand="h", clip="c", seed=1, num_trian_envs=3)  # type: ignore[call-arg]
 
 
 def test_omegaconf_config_is_logged_resolved():

@@ -1,4 +1,6 @@
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Optional, cast
 
 import numpy as np
@@ -214,15 +216,71 @@ def _to_clean_dict(obj: Any) -> dict[str, Any]:
         ) from e
 
 
+@dataclass(frozen=True)
+class _ConfigField:
+    """A benchmark/* config key and the places in a run's config where methods store it, first match wins."""
+
+    name: str
+    convert: Callable[[Any], Any]
+    paths: tuple[str | tuple[str, ...], ...]
+
+
+# A key the run's config lacks is not logged: a default would look like a value the run used.
+_CONFIG_FIELDS = (
+    _ConfigField(
+        "learning_rate",
+        float,
+        (
+            ("agent", "learning_rate_init"),
+            "actor_learning_rate",
+            ("hyperparameters", "lr"),
+            ("params", "config", "learning_rate"),
+        ),
+    ),
+    _ConfigField(
+        "actor_hidden_dim",
+        int,
+        (("agent", "actor_hidden_dim"), "actor_hidden_dim", ("hyperparameters", "actor_hidden_dim")),
+    ),
+    _ConfigField(
+        "critic_hidden_dim",
+        int,
+        (("agent", "critic_hidden_dim"), "critic_hidden_dim", ("hyperparameters", "critic_hidden_dim")),
+    ),
+    _ConfigField(
+        "actor_blocks",
+        int,
+        (("agent", "actor_num_blocks"), "actor_num_blocks", ("hyperparameters", "num_actor_layers")),
+    ),
+    _ConfigField(
+        "critic_blocks",
+        int,
+        (("agent", "critic_num_blocks"), "critic_num_blocks", ("hyperparameters", "num_critic_pred_layers")),
+    ),
+    _ConfigField(
+        "gamma", float, (("agent", "gamma"), ("hyperparameters", "gamma"), "gamma", ("params", "config", "gamma"))
+    ),
+    _ConfigField(
+        "batch_size", int, (("agent", "sample_batch_size"), "batch_size", ("params", "config", "minibatch_size"))
+    ),
+    _ConfigField(
+        "use_amp",
+        bool,
+        (("agent", "use_amp"), "amp", ("platform", "amp_enabled"), ("params", "config", "mixed_precision")),
+    ),
+    _ConfigField("normalize_reward", bool, (("agent", "normalize_reward"), "reward_normalization")),
+)
+
+
 class UniversalLogger:
     _installed: bool = False
     is_eval: bool = False
-    algo: str = "flash_sac"
-    hand: str = "allegro_hand"
-    clip: str = "box-30-230"
-    seed: int = 0
+    algo: Optional[str] = None
+    hand: Optional[str] = None
+    clip: Optional[str] = None
+    seed: Optional[int] = None
     num_envs: int = 1024
-    num_train_envs: int = 1024
+    num_train_envs: Optional[int] = None
     num_eval_envs: Optional[int] = None
     horizon_length: int = 16
     keep_model_specific: bool = True
@@ -243,7 +301,6 @@ class UniversalLogger:
         horizon_length: int = 16,
         keep_model_specific: bool = True,
         is_eval: bool = False,
-        **kwargs: Any,
     ) -> None:
         algo_key = algo.lower().replace("-", "_")
         if algo_key in ("fasttd3", "fast_td3"):
@@ -271,14 +328,15 @@ class UniversalLogger:
 
     @classmethod
     def standardize_config(cls, raw_cfg: Any) -> dict[str, Any]:
+        if cls.algo is None or cls.hand is None or cls.clip is None or cls.seed is None or cls.num_train_envs is None:
+            raise RuntimeError(
+                "Cannot standardize the run config: UniversalLogger.install() has not been called, so the run's "
+                "algorithm, hand, clip, seed and env count are unknown and the run would be labelled wrongly. "
+                "Call UniversalLogger.install(...) before wandb.init()."
+            )
         cfg = _to_clean_dict(raw_cfg)
 
-        raw_algo = (
-            cls.algo
-            or _extract_val(cfg, ("agent", "agent_type"), "agent", "name", ("params", "algo", "name"), "group_name")
-            or "unknown_algo"
-        )
-        algo_str = str(raw_algo).lower()
+        algo_str = cls.algo.lower()
         if "flash" in algo_str:
             algo_canonical = "FlashSAC"
         elif "fast" in algo_str:
@@ -288,99 +346,28 @@ class UniversalLogger:
         elif "ppo" in algo_str:
             algo_canonical = "PPO"
         else:
-            algo_canonical = str(raw_algo).upper()
-
-        hand = cls.hand or _extract_val(cfg, ("env", "hand"), "hand", ("env", "name"), default="unknown_hand")
-        clip = cls.clip or _extract_val(cfg, ("env", "clip"), "clip", default="unknown_clip")
-
-        # 3. Seed & Environment Counts (Explicit Train vs Eval)
-        seed = cls.seed
-
-        num_train = cls.num_train_envs or _extract_val(
-            cfg,
-            ("env", "num_train_envs"),
-            "num_train_envs",
-            "num_envs",
-            ("hyperparameters", "num_envs"),
-            ("params", "config", "num_actors"),
-            default=1024,
-        )
-        num_eval = cls.num_eval_envs or _extract_val(
-            cfg, ("env", "num_eval_envs"), "num_eval_envs", "num_eval", default=None
-        )
-
-        lr = _extract_val(
-            cfg,
-            ("agent", "learning_rate_init"),
-            "actor_learning_rate",
-            ("hyperparameters", "lr"),
-            ("params", "config", "learning_rate"),
-            default=0.0003,
-        )
-        actor_dim = _extract_val(
-            cfg, ("agent", "actor_hidden_dim"), "actor_hidden_dim", ("hyperparameters", "actor_hidden_dim"), default=512
-        )
-        critic_dim = _extract_val(
-            cfg,
-            ("agent", "critic_hidden_dim"),
-            "critic_hidden_dim",
-            ("hyperparameters", "critic_hidden_dim"),
-            default=512,
-        )
-        actor_blocks = _extract_val(
-            cfg, ("agent", "actor_num_blocks"), "actor_num_blocks", ("hyperparameters", "num_actor_layers"), default=1
-        )
-        critic_blocks = _extract_val(
-            cfg,
-            ("agent", "critic_num_blocks"),
-            "critic_num_blocks",
-            ("hyperparameters", "num_critic_pred_layers"),
-            default=1,
-        )
-        gamma = _extract_val(
-            cfg, ("agent", "gamma"), ("hyperparameters", "gamma"), "gamma", ("params", "config", "gamma"), default=0.99
-        )
-        batch_size = _extract_val(
-            cfg,
-            ("agent", "sample_batch_size"),
-            "batch_size",
-            ("hyperparameters", "num_mini_batches"),
-            ("params", "config", "minibatch_size"),
-            default=2048,
-        )
-        use_amp = _extract_val(
-            cfg,
-            ("agent", "use_amp"),
-            "amp",
-            ("platform", "amp_enabled"),
-            ("params", "config", "mixed_precision"),
-            default=True,
-        )
-        normalize_reward = _extract_val(cfg, ("agent", "normalize_reward"), "reward_normalization", default=False)
+            algo_canonical = cls.algo.upper()
 
         canonical_dict: dict[str, Any] = {
             "algo": algo_canonical,
-            "hand": str(hand),
-            "clip": str(clip),
-            "seed": int(seed),
-            "num_envs": int(num_train),
-            "num_train_envs": int(num_train),
-            "learning_rate": float(lr),
-            "actor_hidden_dim": int(actor_dim),
-            "critic_hidden_dim": int(critic_dim),
-            "actor_blocks": int(actor_blocks),
-            "critic_blocks": int(critic_blocks),
-            "gamma": float(gamma),
-            "batch_size": int(batch_size),
-            "use_amp": bool(use_amp),
-            "normalize_reward": bool(normalize_reward),
+            "hand": cls.hand,
+            "clip": cls.clip,
+            "seed": cls.seed,
+            "num_envs": cls.num_train_envs,
+            "num_train_envs": cls.num_train_envs,
         }
+        num_eval = cls.num_eval_envs or _extract_val(cfg, ("env", "num_eval_envs"), "num_eval_envs", "num_eval")
         if num_eval is not None:
             canonical_dict["num_eval_envs"] = int(num_eval)
 
+        for field in _CONFIG_FIELDS:
+            value = _extract_val(cfg, *field.paths)
+            if value is not None:
+                canonical_dict[field.name] = field.convert(value)
+
         unified_config = dict(cfg)
         for k, v in canonical_dict.items():
-            unified_config[k] = v
+            unified_config.setdefault(k, v)
             unified_config[f"benchmark/{k}"] = v
 
         return unified_config
