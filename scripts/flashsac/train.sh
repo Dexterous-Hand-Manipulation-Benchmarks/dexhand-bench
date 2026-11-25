@@ -178,21 +178,7 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 --overrides "num_eval_episodes=${NUM_EVAL_EPISODES}" \
                 --overrides "num_record_episodes=0" \
                 --overrides "++env.curriculum=${USE_CURRICULUM}" \
-                --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}" \
-                `#=== Reward Shaping Weights (Identical to FastTD3) ===#` \
-                --overrides ++env.reward_cfg.force_penalty=0.1 \
-                --overrides ++env.reward_cfg.action_penalty=0.01 \
-                --overrides ++env.reward_cfg.task_rew_weight=1.0 \
-                --overrides ++env.reward_cfg.obj_pos_beta=10.0 \
-                --overrides ++env.reward_cfg.obj_rot_beta=1.0 \
-                --overrides ++env.reward_cfg.obj_arti_beta=5.0 \
-                --overrides ++env.reward_cfg.imi_rew_weight=0.3 \
-                --overrides ++env.reward_cfg.imi_wrist_weight=0.5 \
-                --overrides ++env.reward_cfg.contact_rew_weight=3.0 \
-                --overrides ++env.reward_cfg.contact_beta=10.0 \
-                --overrides ++env.reward_cfg.bc_rew_weight=0.3 \
-                --overrides ++env.reward_cfg.bc_beta=500.0 \
-                --overrides ++env.reward_cfg.use_retarget_contact=true
+                --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}"
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
