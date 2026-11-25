@@ -3,6 +3,7 @@
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -42,6 +43,8 @@ TINY_RUN_OVERRIDES = [
 
 
 class RecordingLogger:
+    run = SimpleNamespace(id="run-id-1234")
+
     def __init__(self) -> None:
         self.updates: list[dict[str, Any]] = []
         self.logged_steps: list[int] = []
@@ -161,3 +164,11 @@ def test_a_finished_episodes_next_observation_is_the_one_before_the_reset(train_
         expected = transition["observation"] + 1
         assert (transition["next_observation"] == expected).all()
     assert any(transition["terminated"].any() for transition in transitions)
+
+
+def test_the_wandb_run_id_is_saved_in_the_run_directory(train_run, monkeypatch):
+    monkeypatch.setattr(train_run.module, "WandbTrainerLogger", RecordingLogger)
+    train_run.run([])
+    run_dirs = list((train_run.directory / "models").glob("*/*/*/*/seed*"))
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / flash_dex.WANDB_RUN_ID_FILENAME).read_text().strip() == RecordingLogger.run.id
