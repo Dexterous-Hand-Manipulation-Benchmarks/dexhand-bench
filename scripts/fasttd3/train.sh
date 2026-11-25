@@ -141,8 +141,7 @@ for seed in "${seeds[@]}"; do
                 evaluate_checkpoint "$CKPT"
             done
 
-            # 2. The final checkpoint: the reported score. best.pt is never evaluated: it is picked on a training
-            # diagnostic, so its score would be selection-biased.
+            # 2. The final checkpoint: the reported score.
             evaluate_checkpoint "$FINAL_CKPT"
 
             echo "[SUCCESS] All milestone evaluations completed for $run_exp_name"

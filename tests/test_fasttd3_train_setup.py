@@ -291,10 +291,14 @@ class WandbStandIn:
         self.mode = mode
         self.run = None
         self.config = SimpleNamespace(update=lambda *args, **kwargs: None)
+        self.logged: list[dict] = []
 
     def init(self, project, entity=None, **_):
         self.run = wandb_run(self.mode, project, entity)
         return self.run
+
+    def log(self, data, step=None):
+        self.logged.append(data)
 
 
 # Offline and disabled runs pass without the change too: they only guard that no file is written for them.
@@ -318,3 +322,32 @@ def test_a_recorded_wandb_run_is_never_replaced_and_an_unset_entity_is_null(trai
     assert json.loads((tmp_path / "wandb_run.json").read_text())["entity"] is None
     with pytest.raises(FileExistsError, match="another W&B run"):
         save_wandb_run(tmp_path, wandb_run("online"))
+
+
+IN_LOOP_EVAL_KEYS = {
+    "fast_td3/eval_return", "fast_td3/eval_length", "fast_td3/pose_success_2cm", "fast_td3/pose_success_5cm",
+    "fast_td3/pos_dist", "fast_td3/rot_dist",
+}
+
+
+def test_the_in_loop_evaluation_logs_diagnostics_never_benchmark_or_best_keys(train_setup, monkeypatch, tmp_path):
+    wandb_logger = pytest.importorskip("dexhand_bench.wandb_logger")
+    dexmachina_env = importlib.import_module("environments.dexmachina_env")
+    monkeypatch.setattr(dexmachina_env, "advance_curriculum", lambda envs, step, total, current_epoch: current_epoch)
+    stand_in = WandbStandIn("online")
+    work_dir = train_setup(
+        "fasttd3", run_seed=0, env_reseed=42, stop_at="end", wandb_stand_in=stand_in,
+        extra_args=(
+            "--total_timesteps", "4", "--eval_interval", "2", "--save_interval", "0", "--learning_starts", "0",
+            "--batch_size", "8",
+        ),
+    )
+    # What the shared logger, which intercepts wandb.log in real runs, makes of the logged keys.
+    keys = {
+        key
+        for data in stand_in.logged
+        for key in wandb_logger.UniversalLogger.build_sanitized_payload(data, explicit_step=None)
+    }
+    assert keys >= IN_LOOP_EVAL_KEYS
+    assert not {key for key in keys if key.startswith(("eval/", "best/", "benchmark/"))}
+    assert not list(work_dir.glob("models/FastTD3/*/*/best.pt"))
