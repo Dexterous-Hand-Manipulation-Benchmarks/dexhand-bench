@@ -40,6 +40,8 @@ DIFFERS_FROM_DEFAULT: dict[str, Any] = {
     "kv_init": 5.0,
     "upper_ratios": (0.9, 0.9, 1.0),
     "lower_ratios": (0.8, 0.8, 1.0),
+    "curr_schedule": "fixed",
+    "budget_env_steps": 50_000_000,
     "wait_epochs": 100,
     "skip_grad": True,
     "dialback_ep_len": 80,

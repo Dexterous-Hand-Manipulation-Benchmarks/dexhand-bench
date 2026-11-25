@@ -2024,6 +2024,7 @@
  "flashsac/golden": {
   "env_kwargs": {
    "curriculum_cfg": {
+    "budget_env_steps": null,
     "d0_lower": 0.9,
     "decay_rew": false,
     "decay_solimp": false,
@@ -2040,6 +2041,8 @@
     "first_ratio": 0.3,
     "first_stop_iter": 7000,
     "fixed_mode": "uniform",
+    "fixed_start_fraction": 0.01,
+    "fixed_zero_fraction": 0.6,
     "force_range_init": 50.0,
     "gain_mode": "all",
     "grad_threshold": 0.001,
@@ -4046,6 +4049,7 @@
  "flashsac/mixer": {
   "env_kwargs": {
    "curriculum_cfg": {
+    "budget_env_steps": null,
     "d0_lower": 0.9,
     "decay_rew": false,
     "decay_solimp": false,
@@ -4062,6 +4066,8 @@
     "first_ratio": 0.3,
     "first_stop_iter": 7000,
     "fixed_mode": "uniform",
+    "fixed_start_fraction": 0.01,
+    "fixed_zero_fraction": 0.6,
     "force_range_init": 50.0,
     "gain_mode": "all",
     "grad_threshold": 0.001,
@@ -6068,6 +6074,7 @@
  "flashsac/no_reward_overrides": {
   "env_kwargs": {
    "curriculum_cfg": {
+    "budget_env_steps": null,
     "d0_lower": 0.9,
     "decay_rew": false,
     "decay_solimp": false,
@@ -6084,6 +6091,8 @@
     "first_ratio": 0.3,
     "first_stop_iter": 7000,
     "fixed_mode": "uniform",
+    "fixed_start_fraction": 0.01,
+    "fixed_zero_fraction": 0.6,
     "force_range_init": 50.0,
     "gain_mode": "all",
     "grad_threshold": 0.001,

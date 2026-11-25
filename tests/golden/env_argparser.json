@@ -78,6 +78,9 @@
     "max_epochs",
     "num_zero_epoch",
     "curr_schedule",
+    "budget_env_steps",
+    "fixed_start_fraction",
+    "fixed_zero_fraction",
     "fixed_mode",
     "decay_rew",
     "wait_epochs",
@@ -1273,6 +1276,48 @@
         "exp",
         "uniform"
       ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--budget_env_steps"
+      ],
+      "dest": "budget_env_steps",
+      "default": null,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": "Training env steps the run is budgeted for; the fixed curriculum schedule is a fraction of it",
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--fixed_start_fraction"
+      ],
+      "dest": "fixed_start_fraction",
+      "default": 0.01,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--fixed_zero_fraction"
+      ],
+      "dest": "fixed_zero_fraction",
+      "default": 0.6,
+      "type": "float",
+      "choices": null,
       "nargs": null,
       "const": null,
       "required": false,
