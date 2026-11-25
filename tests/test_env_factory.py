@@ -113,3 +113,13 @@ def test_make_env_builds_the_golden_flashsac_env(genesis_cpu, isolated_hand_cfgs
     env = factory.make_env(spec, CPU, GOLDEN_REWARD_OVERRIDES)
     assert env.reward_module.bc_wrist_weight == GOLDEN_REWARD_OVERRIDES["bc_wrist_weight"]
     assert env.num_envs == spec.num_envs
+
+
+def test_a_reward_override_the_reward_module_does_not_read_raises() -> None:
+    with pytest.raises(ValueError, match=r"contact_betta.*valid keys.*contact_beta"):
+        factory.build_env_kwargs(ACTUATED_SPEC, CPU, {"contact_betta": 5.0})
+
+
+def test_every_reward_key_the_methods_override_is_known() -> None:
+    reward_cfg = factory.build_env_kwargs(ACTUATED_SPEC, CPU, GOLDEN_REWARD_OVERRIDES)["reward_cfg"]
+    assert {key: reward_cfg[key] for key in GOLDEN_REWARD_OVERRIDES} == GOLDEN_REWARD_OVERRIDES

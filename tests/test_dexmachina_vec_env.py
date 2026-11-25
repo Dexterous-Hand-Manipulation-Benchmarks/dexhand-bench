@@ -367,7 +367,7 @@ def test_env_without_rl_games_return_is_rejected() -> None:
 
 
 def test_reset_rejects_a_seed() -> None:
-    with pytest.raises(ValueError, match="seeded when it is built"):
+    with pytest.raises(ValueError, match="does not seed numpy or torch"):
         _vec(FakeBaseEnv()).reset(seed=1)
 
 

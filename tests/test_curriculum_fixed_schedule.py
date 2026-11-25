@@ -141,6 +141,12 @@ def test_the_fixed_schedule_needs_a_budget() -> None:
         _make_curriculum(budget_env_steps=None)
 
 
+@pytest.mark.parametrize("kp_init", [0.04, 0.05])
+def test_a_start_gain_giving_fewer_than_two_decays_raises(kp_init: float) -> None:
+    with pytest.raises(ValueError, match="at least 2 decays"):
+        _make_curriculum(kp_init=kp_init)
+
+
 def test_a_changed_epoch_option_warns_that_it_has_no_effect() -> None:
     with pytest.warns(UserWarning, match="first_ratio.*no effect"):
         _make_curriculum(first_ratio=0.5)
