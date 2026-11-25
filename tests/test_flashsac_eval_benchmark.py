@@ -236,11 +236,11 @@ def test_an_obs_normalizer_file_with_a_config_that_does_not_normalize_is_an_erro
         eval_dexmachina.evaluate_benchmark(step_dir, CPU)
 
 
-def test_a_config_that_normalizes_without_an_obs_normalizer_file_is_an_error(tmp_path):
+def test_loading_a_checkpoint_without_its_obs_normalizer_file_is_an_error(tmp_path):
     step_dir, _ = _save_run(tmp_path, normalize_observation=True)
     (step_dir / eval_dexmachina.OBS_NORMALIZER_FILENAME).unlink()
-    with pytest.raises(FileNotFoundError, match="normalize_observation true"):
-        eval_dexmachina.evaluate_benchmark(step_dir, CPU)
+    with pytest.raises(FileNotFoundError, match="normalize_observation is true"):
+        _eval_agent(tmp_path, step_dir)
 
 
 def test_a_directory_that_is_not_a_step_directory_is_refused(tmp_path):
