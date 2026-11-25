@@ -55,6 +55,7 @@
     "use_rl_games",
     "is_eval",
     "rand_init_ratio",
+    "clear_nan_on_reset",
     "chunk_ep_length",
     "use_rand",
     "rand_friction",
@@ -940,6 +941,21 @@
       "required": false,
       "help": null,
       "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--clear_nan_on_reset",
+        "--no-clear_nan_on_reset"
+      ],
+      "dest": "clear_nan_on_reset",
+      "default": true,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": null,
+      "required": false,
+      "help": "Clear the NaN flag of an env when it resets (default: %(default)s)",
+      "action": "BooleanOptionalAction"
     },
     {
       "option_strings": [
