@@ -11,5 +11,7 @@ SCRIPT="${ROOT}/scripts/slurm/${JOB}.sbatch"
 # Read the slurm section with the job's own uv extra, so the run environment is not re-synced.
 ARGS=$(uv run --project "${ROOT}" --exact --extra "${JOB}" dexhand-bench sbatch-args "${JOB}")
 cd "${ROOT}"
+# SLURM opens the --output/--error files (logs/...) before the job script runs, so the job cannot create the directory.
+mkdir -p logs
 echo "[INFO] sbatch ${ARGS} $* ${SCRIPT}"
 eval sbatch ${ARGS} '"$@"' '"${SCRIPT}"'
