@@ -126,7 +126,6 @@ PER_EPISODE_WAIT_EPOCHS = 330
 PER_EPISODE_EMA = 1.0 / PER_EPISODE_DEQUE_LEN
 SCALED_DEQUE_BASE_LEN = 30
 SCALED_DEQUE_BASE_ENVS = 1024
-FIXED_INTERVAL = 50
 
 NUM_ENVS_GRID = (1024, 2048, 4096, 8192)
 RAND_INIT_GRID = (0.0, 0.02)
@@ -209,24 +208,10 @@ def make_sim_curriculum_class(module: types.ModuleType) -> type[Any]:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             self.last_dialed_back = False
-            # curriculum.py set_fixed_decay (:144-146) only decays when epoch % interval == 0. The first decay is
-            # the first call after wait_epochs, which counts as one crossing.
-            self.interval_index: int = (self.wait_epochs - 1) // self.curr_cfg["interval"]
 
         def determine_dialback(self, epoch_num: int) -> bool:
             self.last_dialed_back = super().determine_dialback(epoch_num)
             return self.last_dialed_back
-
-        def set_fixed_decay(self, epoch_num: int) -> tuple[bool, str]:
-            """Decays once per multiple of interval that the epoch has crossed, also when epochs were skipped."""
-            interval: int = self.curr_cfg["interval"]
-            crossed = epoch_num // interval - self.interval_index
-            if crossed <= 0:
-                return False, "wrong interval"
-            for _ in range(crossed):
-                self.interval_index += 1
-                super().set_fixed_decay(self.interval_index * interval)
-            return True, ""
 
         def update_progress_episodes(
             self, rewards: dict[str, npt.NDArray[np.float64]], episode_lengths: npt.NDArray[np.float64]
@@ -246,8 +231,7 @@ def curriculum_kwargs(variant: Variant, num_envs: int) -> dict[str, Any]:
     elif variant is Variant.SCALED_DEQUE:
         kwargs.update(deque_len=max(1, round(SCALED_DEQUE_BASE_LEN * SCALED_DEQUE_BASE_ENVS / num_envs)))
     elif variant is Variant.FIXED:
-        # dialback_ep_len 0: determine_dialback (curriculum.py:240) needs achieved_len < 0, never true.
-        kwargs.update(schedule="fixed", interval=FIXED_INTERVAL, dialback_ep_len=0)
+        kwargs.update(schedule="fixed", budget_env_steps=BUDGET_ENV_STEPS)
     return kwargs
 
 
@@ -391,7 +375,12 @@ def run_one(spec: RunSpec, curriculum_class: type[Any], module: types.ModuleType
         # Same mapping as FlashSAC's curriculum_epoch (flash_rl/envs/dexmachina.py), in integer arithmetic.
         epoch = vector_step * spec.num_envs * MAX_EPOCHS // BUDGET_ENV_STEPS
         gains_changed = False
-        if epoch > last_epoch:
+        if spec.variant is Variant.FIXED:
+            # The env counts its own training steps (base_env.py) and re-draws the object gains when a decay is due.
+            gains_changed = curriculum.advance_env_steps(spec.num_envs)
+            if gains_changed:
+                curriculum.reset_object_gains()
+        elif epoch > last_epoch:
             with contextlib.redirect_stdout(io.StringIO()):
                 _, gains_changed, _ = curriculum.set_curriculum(epoch)
             last_epoch = epoch
