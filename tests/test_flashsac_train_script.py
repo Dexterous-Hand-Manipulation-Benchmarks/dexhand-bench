@@ -1,42 +1,201 @@
-"""train.sh evaluates with the shared protocol; the checks read the script text, because running it needs GPUs."""
+"""scripts/flashsac/train.sh and evaluate_run.sh run against a temporary copy of the layout, with a fake `uv`/`python`.
 
-import re
+The fake "training" writes what train.py writes (checkpoints, run id file); the fake "evaluation" writes the benchmark
+trajectory next to the checkpoint it is given, like eval_dexmachina.py.
+"""
+
+import importlib.util
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).parents[1] / "scripts/flashsac/train.sh"
+flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
+
+REPO_ROOT = Path(__file__).parents[1]
+TRAIN_SCRIPT = REPO_ROOT / "scripts/flashsac/train.sh"
+EVALUATE_SCRIPT = REPO_ROOT / "scripts/flashsac/evaluate_run.sh"
+
+_eval_spec = importlib.util.spec_from_file_location(
+    "flashsac_eval_dexmachina", REPO_ROOT / "algorithms/FlashSAC/eval_dexmachina.py"
+)
+assert _eval_spec is not None and _eval_spec.loader is not None
+eval_dexmachina = sys.modules.get(_eval_spec.name) or importlib.util.module_from_spec(_eval_spec)
+if _eval_spec.name not in sys.modules:
+    sys.modules[_eval_spec.name] = eval_dexmachina
+    _eval_spec.loader.exec_module(eval_dexmachina)
+
+WANDB_RUN_ID = "run1234"
+FINAL_STEP = 50_000_896 // 1024  # NUM_ENV_STEPS // NUM_TRAIN_ENVS in train.sh
+INTERVAL_STEP = 4882  # CHECKPOINT_INTERVAL in train.sh
+EXPERIMENT = "allegro_hand_box-30-230_seed2000_10M_official"
+TRAJECTORY = eval_dexmachina.TRAJECTORY_FILENAME.format(sha="abc123")
+needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
 
 
-@pytest.fixture(scope="module")
-def script_text() -> str:
-    return SCRIPT.read_text()
+def make_executable(path: Path, text: str) -> None:
+    path.write_text(text)
+    path.chmod(0o755)
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
-def test_the_script_is_valid_bash():
-    subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
+@needs_bash
+@pytest.mark.parametrize("script", [TRAIN_SCRIPT, EVALUATE_SCRIPT])
+def test_the_scripts_are_valid_bash(script: Path) -> None:
+    subprocess.run(["bash", "-n", str(script)], check=True)
 
 
-def evaluation_command(script_text: str) -> str:
-    match = re.search(r"python eval_dexmachina\.py(?:[^\n]*\\\n)*[^\n]*\n", script_text)
-    assert match is not None, "train.sh runs no eval_dexmachina.py"
-    return match.group(0)
+def run_evaluate_script(
+    tmp_path: Path, steps: list[int], *, python_exit_code: int, write_run_id: bool = True
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    run_dir = tmp_path / "run"
+    for step in steps:
+        (run_dir / f"step{step}").mkdir(parents=True)
+    run_dir.mkdir(exist_ok=True)
+    if write_run_id:
+        (run_dir / flash_dex.WANDB_RUN_ID_FILENAME).write_text(f"{WANDB_RUN_ID}\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    python_log = tmp_path / "python.log"
+    make_executable(bin_dir / "python", f'#!/bin/bash\necho "$*" >> "{python_log}"\nexit {python_exit_code}\n')
+    result = subprocess.run(
+        ["bash", str(EVALUATE_SCRIPT), str(run_dir), "fake-project", "cuda:0"],
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+    )
+    return result, run_dir
 
 
-def test_the_evaluation_uses_the_shared_protocol_on_the_run_it_trained(script_text):
-    command = evaluation_command(script_text)
-    assert "--old-protocol" not in script_text
-    assert "--checkpoint_path" in command
-    assert '--wandb_run_id "${WANDB_RUN_ID}"' in command
+def remaining_steps(run_dir: Path) -> list[str]:
+    return sorted(path.name for path in run_dir.glob("step*"))
 
 
-def test_the_wandb_run_id_comes_from_the_run_directory_not_from_the_newest_wandb_folder(script_text):
-    assert "wandb_run_id.txt" in script_text
-    assert "ls -td wandb" not in script_text
+@needs_bash
+def test_a_successful_evaluation_keeps_only_the_final_checkpoint(tmp_path: Path) -> None:
+    result, run_dir = run_evaluate_script(tmp_path, [5, 10, 12], python_exit_code=0)
+    assert result.returncode == 0, result.stderr
+    assert remaining_steps(run_dir) == ["step12"]
+    command = (tmp_path / "python.log").read_text()
+    assert f"--checkpoint_path {run_dir}/step12 --wandb_run_id {WANDB_RUN_ID} --project fake-project" in command
 
 
-def test_a_run_is_skipped_when_its_benchmark_trajectory_exists(script_text):
-    assert "benchmark_trajectory_*.npz" in script_text
+@needs_bash
+def test_a_failed_evaluation_deletes_no_checkpoint(tmp_path: Path) -> None:
+    result, run_dir = run_evaluate_script(tmp_path, [5, 10, 12], python_exit_code=1)
+    assert result.returncode == 1
+    assert remaining_steps(run_dir) == ["step10", "step12", "step5"]
+
+
+@needs_bash
+def test_a_run_without_the_run_id_file_is_an_error(tmp_path: Path) -> None:
+    result, run_dir = run_evaluate_script(tmp_path, [5, 12], python_exit_code=0, write_run_id=False)
+    assert result.returncode == 1
+    assert flash_dex.WANDB_RUN_ID_FILENAME in result.stderr
+    assert remaining_steps(run_dir) == ["step12", "step5"]
+    assert not (tmp_path / "python.log").exists()
+
+
+@needs_bash
+def test_a_run_without_a_checkpoint_is_an_error(tmp_path: Path) -> None:
+    result, _ = run_evaluate_script(tmp_path, [], python_exit_code=0)
+    assert result.returncode == 1
+    assert "saved no checkpoint" in result.stderr
+    assert not (tmp_path / "python.log").exists()
+
+
+FAKE_UV = r"""#!/bin/bash
+set -e
+shift 6  # run --project <root> --exact --extra flashsac
+case "$*" in
+    "dexhand-bench env")
+        echo "export WANDB_PROJECT=fake-project" ;;
+    "python -c "*)
+        echo 1 ;;
+    "python train.py "*)
+        save_path=$(echo "$*" | sed -E 's/.*save_path=([^ ]+).*/\1/')
+        echo "train $save_path" >> "$FAKE_LOG"
+        mkdir -p "$save_path/step$FAKE_INTERVAL_STEP" "$save_path/step$FAKE_FINAL_STEP"
+        echo run1234 > "$save_path/$FAKE_RUN_ID_FILENAME" ;;
+    "python eval_dexmachina.py "*)
+        echo "eval $*" >> "$FAKE_LOG"
+        checkpoint=$(echo "$*" | sed -E 's/.*--checkpoint_path ([^ ]+).*/\1/')
+        touch "$checkpoint/$FAKE_TRAJECTORY" ;;
+    *)
+        echo "fake uv: unexpected command: $*" >&2
+        exit 99 ;;
+esac
+"""
+
+
+def run_train_script(tmp_path: Path, *, existing_steps: tuple[int, ...] = (), existing_trajectory: bool = False):
+    """Runs train.sh with data for the allegro box run only, so exactly that run of the queue is considered."""
+    root = tmp_path / "repo"
+    (root / "scripts/flashsac").mkdir(parents=True)
+    shutil.copy(REPO_ROOT / "scripts/common.sh", root / "scripts/common.sh")
+    for script in (TRAIN_SCRIPT, EVALUATE_SCRIPT):
+        shutil.copy(script, root / "scripts/flashsac" / script.name)
+    experiment_dir = root / "algorithms/FlashSAC/models/FlashSAC" / EXPERIMENT
+    previous_run = experiment_dir / "dexmachina/allegro_hand/seed2000-20260101-000000"
+    for step in existing_steps:
+        (previous_run / f"step{step}").mkdir(parents=True)
+    if existing_steps:
+        (previous_run / flash_dex.WANDB_RUN_ID_FILENAME).write_text(f"{WANDB_RUN_ID}\n")
+    if existing_trajectory:
+        trajectory = previous_run / f"step{FINAL_STEP}" / TRAJECTORY
+        trajectory.parent.mkdir(parents=True, exist_ok=True)
+        trajectory.touch()
+    retarget = root / "environments/dexmachina/dexmachina/assets/contact_retarget/allegro_hand/s01/box_use_01.npy"
+    retarget.parent.mkdir(parents=True)
+    retarget.touch()
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    make_executable(bin_dir / "uv", FAKE_UV)
+    log = tmp_path / "calls.log"
+    env = {
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "UV_PROJECT_ENVIRONMENT": str(tmp_path / "venv"),
+        "FAKE_LOG": str(log),
+        "FAKE_INTERVAL_STEP": str(INTERVAL_STEP),
+        "FAKE_FINAL_STEP": str(FINAL_STEP),
+        "FAKE_RUN_ID_FILENAME": flash_dex.WANDB_RUN_ID_FILENAME,
+        "FAKE_TRAJECTORY": TRAJECTORY,
+    }
+    (root / "algorithms/FlashSAC").mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["bash", str(root / "scripts/flashsac/train.sh")], env=env, capture_output=True, text=True, timeout=60
+    )
+    calls = log.read_text().splitlines() if log.exists() else []
+    return result, calls, experiment_dir
+
+
+@needs_bash
+def test_a_new_run_trains_into_a_directory_the_script_names_and_evaluates_it(tmp_path: Path) -> None:
+    result, calls, experiment_dir = run_train_script(tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert [call.split()[0] for call in calls] == ["train", "eval"]
+    run_dirs = list((experiment_dir / "dexmachina/allegro_hand").iterdir())
+    assert len(run_dirs) == 1
+    assert run_dirs[0].name.startswith("seed2000-20")
+    run_relative = f"models/FlashSAC/{EXPERIMENT}/dexmachina/allegro_hand/{run_dirs[0].name}"
+    assert calls[0] == f"train {run_relative}"
+    assert f"--checkpoint_path {run_relative}/step{FINAL_STEP}" in calls[1]
+    assert remaining_steps(run_dirs[0]) == [f"step{FINAL_STEP}"]
+
+
+@needs_bash
+def test_a_finished_training_without_an_evaluation_is_only_evaluated(tmp_path: Path) -> None:
+    result, calls, experiment_dir = run_train_script(tmp_path, existing_steps=(INTERVAL_STEP, FINAL_STEP))
+    assert result.returncode == 0, result.stderr
+    assert [call.split()[0] for call in calls] == ["eval"]
+    assert remaining_steps(experiment_dir / "dexmachina/allegro_hand/seed2000-20260101-000000") == [f"step{FINAL_STEP}"]
+
+
+@needs_bash
+def test_a_run_with_an_evaluation_is_skipped(tmp_path: Path) -> None:
+    result, calls, _ = run_train_script(tmp_path, existing_steps=(FINAL_STEP,), existing_trajectory=True)
+    assert result.returncode == 0, result.stderr
+    assert calls == []

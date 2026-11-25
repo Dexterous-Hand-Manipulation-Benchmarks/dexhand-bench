@@ -99,11 +99,16 @@ RUN_QUEUE=(
     "2000 xhand box-30-230"
 )
 
+# train.py saves the final checkpoint as step<number of interaction steps> (NUM_ENV_STEPS without its underscores).
+FINAL_INTERACTION_STEP=$(( ${NUM_ENV_STEPS//_/} / NUM_TRAIN_ENVS ))
+
 # Execution of runs
 for run_item in "${RUN_QUEUE[@]}"; do
     read -r seed hand clip <<< "$run_item"
 
     run_exp_name="${hand}_${clip}_seed${seed}_10M_official"
+    env_name="${ENV_TYPE}/${hand}"
+    exp_dir="models/${GROUP_NAME}/${run_exp_name}"
 
     obj_name=$(echo "$clip" | cut -d'-' -f1)
     data_file="${DEXMACHINA_ASSETS}/contact_retarget/${hand}/s01/${obj_name}_use_01.npy"
@@ -114,111 +119,95 @@ for run_item in "${RUN_QUEUE[@]}"; do
     fi
 
     # The benchmark evaluation (eval_dexmachina.py, TRAJECTORY_FILENAME) saves this file next to the evaluated checkpoint.
-    COMPLETED_EVALUATION=$(find "models/FlashSAC/${run_exp_name}" -mindepth 3 -maxdepth 5 -type f -name "benchmark_trajectory_*.npz" 2>/dev/null | head -n 1)
+    COMPLETED_EVALUATION=$(find "$exp_dir" -mindepth 3 -maxdepth 5 -type f -name "benchmark_trajectory_*.npz" 2>/dev/null | head -n 1)
     if [ -n "$COMPLETED_EVALUATION" ]; then
         echo "[SKIP] Experiment ${run_exp_name} already completed (${COMPLETED_EVALUATION} found). Moving to next..."
         continue
     fi
 
-            SHARED_AGENT_OVERRIDES=(
-                --overrides "agent=${AGENT_NAME}"
-                --overrides "agent.actor_hidden_dim=${ACTOR_HIDDEN_DIM}"
-                --overrides "agent.critic_hidden_dim=${CRITIC_HIDDEN_DIM}"
-                --overrides "agent.actor_num_blocks=${ACTOR_NUM_BLOCKS}"
-                --overrides "agent.critic_num_blocks=${CRITIC_NUM_BLOCKS}"
-                --overrides "agent.asymmetric_observation=${ASYMMETRIC_OBS}"
-                --overrides "agent.bootstrap_on_timeout=${BOOTSTRAP_ON_TIMEOUT}"
-                --overrides "agent.use_effective_gamma=${USE_EFFECTIVE_GAMMA}"
-                --overrides "agent.actor_init_std=${ACTOR_INIT_STD}"
-                --overrides "agent.independent_env_noise=${INDEPENDENT_ENV_NOISE}"
-                --overrides "agent.target_entropy_mode=${TARGET_ENTROPY_MODE}"
-                --overrides "agent.normalize_observation=${NORMALIZE_OBSERVATION}"
-            )
+    # A training that reached its final step but has no evaluation (the evaluation failed earlier) is evaluated, not retrained.
+    FINISHED_STEP_DIRS=$(find "$exp_dir" -maxdepth 5 -type d -name "step${FINAL_INTERACTION_STEP}" 2>/dev/null | sort)
+    if [ -n "$FINISHED_STEP_DIRS" ] && [ "$(echo "$FINISHED_STEP_DIRS" | wc -l)" -gt 1 ]; then
+        echo "[ERROR] ${exp_dir} has several finished trainings without an evaluation:" >&2
+        echo "$FINISHED_STEP_DIRS" >&2
+        echo "        Delete the failed ones, so that the evaluation does not have to guess which run to score." >&2
+        exit 1
+    fi
 
-            SHARED_ENV_OVERRIDES=(
-                --overrides "env=${ENV_TYPE}"
-                --overrides "env.hand=${hand}"
-                --overrides "env.clip=${clip}"
-                --overrides "env.retarget_name=${RETARGET_NAME}"
-            )
+    if [ -n "$FINISHED_STEP_DIRS" ]; then
+        RUN_DIR=$(dirname "$FINISHED_STEP_DIRS")
+        echo "[INFO] Training of ${run_exp_name} is finished (${RUN_DIR}); only its evaluation is missing."
+    else
+        RUN_DIR="${exp_dir}/${env_name}/seed${seed}-$(date +%Y%m%d-%H%M%S)"
 
-            echo "========================================================"
-            echo "[START] Training: $run_exp_name"
-            echo "========================================================"
+        SHARED_AGENT_OVERRIDES=(
+            --overrides "agent=${AGENT_NAME}"
+            --overrides "agent.actor_hidden_dim=${ACTOR_HIDDEN_DIM}"
+            --overrides "agent.critic_hidden_dim=${CRITIC_HIDDEN_DIM}"
+            --overrides "agent.actor_num_blocks=${ACTOR_NUM_BLOCKS}"
+            --overrides "agent.critic_num_blocks=${CRITIC_NUM_BLOCKS}"
+            --overrides "agent.asymmetric_observation=${ASYMMETRIC_OBS}"
+            --overrides "agent.bootstrap_on_timeout=${BOOTSTRAP_ON_TIMEOUT}"
+            --overrides "agent.use_effective_gamma=${USE_EFFECTIVE_GAMMA}"
+            --overrides "agent.actor_init_std=${ACTOR_INIT_STD}"
+            --overrides "agent.independent_env_noise=${INDEPENDENT_ENV_NOISE}"
+            --overrides "agent.target_entropy_mode=${TARGET_ENTROPY_MODE}"
+            --overrides "agent.normalize_observation=${NORMALIZE_OBSERVATION}"
+        )
 
-            # 1. RUN HEADLESS TRAINING
-            python train.py \
-                --config_path "${CONFIG_PATH}" \
-                --config_name "${CONFIG_NAME}" \
-                --overrides "seed=${seed}" \
-                `#=== Logging (WandB) ===#` \
-                --overrides "logger_type=wandb" \
-                --overrides "project_name=${PROJECT_NAME}" \
-                --overrides "group_name=${GROUP_NAME}" \
-                --overrides "exp_name=${run_exp_name}" \
-                `#=== Architecture & Environment Overrides ===#` \
-                "${SHARED_ENV_OVERRIDES[@]}" \
-                "${SHARED_AGENT_OVERRIDES[@]}" \
-                `#=== Device & Scaling Setup ===#` \
-                --overrides "env.rl_device=${SIM_DEVICE}" \
-                --overrides "agent.device_type=${AGENT_DEVICE}" \
-                --overrides "agent.buffer_device_type=${BUFFER_DEVICE}" \
-                --overrides "agent.buffer_max_length=${BUFFER_MAX_LENGTH}" \
-                --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
-                --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
-                --overrides "agent.use_amp=${USE_AMP}" \
-                --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
-                --overrides "gamma=${GAMMA}" \
-                --overrides "n_step=${N_STEP}" \
-                `#=== Simulation Steps & Checkpointing ===#` \
-                --overrides "env.env_name=dexmachina/${hand}" \
-                --overrides "num_env_steps=${NUM_ENV_STEPS}" \
-                --overrides "num_train_envs=${NUM_TRAIN_ENVS}" \
-                --overrides "num_eval_envs=null" \
-                --overrides "num_record_envs=null" \
-                --overrides "num_eval_episodes=${NUM_EVAL_EPISODES}" \
-                --overrides "num_record_episodes=0" \
-                --overrides "++env.curriculum=${USE_CURRICULUM}" \
-                --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}"
+        SHARED_ENV_OVERRIDES=(
+            --overrides "env=${ENV_TYPE}"
+            --overrides "env.hand=${hand}"
+            --overrides "env.clip=${clip}"
+            --overrides "env.retarget_name=${RETARGET_NAME}"
+        )
 
-            echo "[SUCCESS] Training completed for $run_exp_name"
+        echo "========================================================"
+        echo "[START] Training: $run_exp_name"
+        echo "========================================================"
 
-            # 2. BENCHMARK EVALUATION of the final checkpoint (the protocol shared by all methods)
-            echo "[START] Evaluating the final checkpoint of: $run_exp_name"
+        python train.py \
+            --config_path "${CONFIG_PATH}" \
+            --config_name "${CONFIG_NAME}" \
+            --overrides "seed=${seed}" \
+            `#=== Logging (WandB) ===#` \
+            --overrides "logger_type=wandb" \
+            --overrides "project_name=${PROJECT_NAME}" \
+            --overrides "group_name=${GROUP_NAME}" \
+            --overrides "exp_name=${run_exp_name}" \
+            --overrides "save_path=${RUN_DIR}" \
+            `#=== Architecture & Environment Overrides ===#` \
+            "${SHARED_ENV_OVERRIDES[@]}" \
+            "${SHARED_AGENT_OVERRIDES[@]}" \
+            `#=== Device & Scaling Setup ===#` \
+            --overrides "env.rl_device=${SIM_DEVICE}" \
+            --overrides "agent.device_type=${AGENT_DEVICE}" \
+            --overrides "agent.buffer_device_type=${BUFFER_DEVICE}" \
+            --overrides "agent.buffer_max_length=${BUFFER_MAX_LENGTH}" \
+            --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
+            --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
+            --overrides "agent.use_amp=${USE_AMP}" \
+            --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
+            --overrides "gamma=${GAMMA}" \
+            --overrides "n_step=${N_STEP}" \
+            `#=== Simulation Steps & Checkpointing ===#` \
+            --overrides "env.env_name=${env_name}" \
+            --overrides "num_env_steps=${NUM_ENV_STEPS}" \
+            --overrides "num_train_envs=${NUM_TRAIN_ENVS}" \
+            --overrides "num_eval_envs=null" \
+            --overrides "num_record_envs=null" \
+            --overrides "num_eval_episodes=${NUM_EVAL_EPISODES}" \
+            --overrides "num_record_episodes=0" \
+            --overrides "++env.curriculum=${USE_CURRICULUM}" \
+            --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}"
 
-            LATEST_TS_DIR=$(find "models/FlashSAC/${run_exp_name}" -mindepth 2 -maxdepth 3 -type d -name "seed*" 2>/dev/null | sort -V | tail -n 1)
+        echo "[SUCCESS] Training completed for $run_exp_name"
+    fi
 
-            if [ -z "$LATEST_TS_DIR" ]; then
-                echo "[ERROR] No checkpoint directories found for ${run_exp_name}. Skipping evaluation."
-                continue
-            fi
-
-            WANDB_RUN_ID_FILE="${LATEST_TS_DIR}/wandb_run_id.txt"
-            if [ ! -f "$WANDB_RUN_ID_FILE" ]; then
-                echo "[ERROR] ${WANDB_RUN_ID_FILE} does not exist: train.py saves it when the run starts, so the evaluation" >&2
-                echo "        cannot tell which W&B run to log into. Check that training used logger_type=wandb." >&2
-                exit 1
-            fi
-            WANDB_RUN_ID=$(cat "$WANDB_RUN_ID_FILE")
-
-            FINAL_STEP_DIR=$(find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" 2>/dev/null | sort -V | tail -n 1)
-            if [ -z "$FINAL_STEP_DIR" ]; then
-                echo "[ERROR] No step directory in ${LATEST_TS_DIR}; training saved no checkpoint." >&2
-                exit 1
-            fi
-
-            python eval_dexmachina.py \
-                --checkpoint_path "${FINAL_STEP_DIR}" \
-                --wandb_run_id "${WANDB_RUN_ID}" \
-                --project "${PROJECT_NAME}" \
-                --device "${SIM_DEVICE}"
-
-            # Disk policy: only the final checkpoint stays, and only after its evaluation succeeded (set -e).
-            find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" ! -path "${FINAL_STEP_DIR}" -exec rm -rf {} +
-            echo "[PRESERVE] Kept the final checkpoint: ${FINAL_STEP_DIR}"
-        echo "[SUCCESS] Evaluation completed for $run_exp_name"
-        echo "--------------------------------------------------------"
-
+    # The benchmark evaluation of the final checkpoint (the protocol shared by all methods).
+    "${DHB_ROOT}/scripts/flashsac/evaluate_run.sh" "$RUN_DIR" "$PROJECT_NAME" "$SIM_DEVICE"
+    echo "[SUCCESS] Evaluation completed for $run_exp_name"
+    echo "--------------------------------------------------------"
 done
 
 echo "[FINISHED] Benchmark execution complete!"
