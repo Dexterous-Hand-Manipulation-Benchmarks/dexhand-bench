@@ -32,6 +32,9 @@ RETARGET_NAME="para"
 # --- 4. Training-Specific Hyperparameters ---
 NUM_ENV_STEPS=50_000_896
 NUM_TRAIN_ENVS=1024 # AT9
+# The eval env (dexmachina make_eval_env) starts every episode at the first frame, without assistance, and the
+# policy acts deterministically, so more eval episodes would repeat the same rollout.
+NUM_EVAL_EPISODES=1
 CHECKPOINT_INTERVAL=4882
 USE_CURRICULUM="true"
 SAMPLE_BATCH_SIZE=4096
@@ -172,7 +175,7 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 --overrides "num_train_envs=${NUM_TRAIN_ENVS}" \
                 --overrides "num_eval_envs=null" \
                 --overrides "num_record_envs=null" \
-                --overrides "num_eval_episodes=${NUM_TRAIN_ENVS}" \
+                --overrides "num_eval_episodes=${NUM_EVAL_EPISODES}" \
                 --overrides "num_record_episodes=0" \
                 --overrides "++env.curriculum=${USE_CURRICULUM}" \
                 --overrides "save_checkpoint_per_interaction_step=${CHECKPOINT_INTERVAL}" \
