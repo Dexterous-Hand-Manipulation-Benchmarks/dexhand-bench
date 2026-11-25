@@ -40,11 +40,14 @@ DIFFERS_FROM_DEFAULT: dict[str, Any] = {
     "kv_init": 5.0,
     "upper_ratios": (0.9, 0.9, 1.0),
     "lower_ratios": (0.8, 0.8, 1.0),
+    "curr_schedule": "fixed",
+    "budget_env_steps": 50_000_000,
     "wait_epochs": 100,
     "skip_grad": True,
     "dialback_ep_len": 80,
     "curr_rew_thres": (0.6, 0.01, 0.01, 0.01),
     "max_epochs": 10000,
+    "rand_init_ratio": 0.02,
 }
 CHOICES = RunChoices(
     hand="xhand", clip=BENCHMARK_CLIPS[1], seed=7, num_envs=16, vis=True, record_video=True, record_interval=100

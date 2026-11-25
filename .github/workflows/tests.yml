@@ -4,6 +4,13 @@ on:
   push:
   pull_request:
 
+env:
+  # FastTD3 files that are entirely ours: checked with the umbrella rules in their own steps; the rest of the fork
+  # keeps its upstream style.
+  FASTTD3_OWN_FILES: >-
+    algorithms/FastTD3/fast_td3/eval_dexmachina.py
+    algorithms/FastTD3/fast_td3/environments/dexmachina_env.py
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -34,6 +41,9 @@ jobs:
       - if: matrix.extra == 'flashsac'
         continue-on-error: true
         run: uv run --exact --extra flashsac basedpyright
+      - if: matrix.extra == 'fasttd3'
+        continue-on-error: true
+        run: uv run --exact --extra fasttd3 basedpyright $FASTTD3_OWN_FILES
 
   # Separate from lint: these rules block, the rest of lint does not yet.
   silent-failures:
@@ -59,9 +69,9 @@ jobs:
     continue-on-error: true   # until ruff and basedpyright are clean
     steps:
       - uses: actions/checkout@v7
-      - run: git submodule update --init algorithms/FlashSAC
+      - run: git submodule update --init algorithms/FlashSAC algorithms/FastTD3
       - uses: astral-sh/setup-uv@v10.3.3
-      # --frozen: --locked would read every path dependency's metadata, and only FlashSAC is checked out here.
+      # --frozen: --locked would read every path dependency's metadata, and only FlashSAC and FastTD3 are checked out.
       - run: uv run --frozen --only-dev ruff check
       # FlashSAC files that are entirely ours get the umbrella rules; the rest of the fork keeps its upstream config.
       - if: ${{ !cancelled() }}
@@ -70,5 +80,7 @@ jobs:
           algorithms/FlashSAC/eval_dexmachina.py
           algorithms/FlashSAC/check_curriculum.py
           algorithms/FlashSAC/flash_rl/envs/dexmachina.py
+      - if: ${{ !cancelled() }}
+        run: uv run --frozen --only-dev ruff check --config pyproject.toml $FASTTD3_OWN_FILES
       - if: ${{ !cancelled() }}
         run: uv run --frozen --only-dev ruff check --extend-exclude play_isaaclab.py algorithms/FlashSAC

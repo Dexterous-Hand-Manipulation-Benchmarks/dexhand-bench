@@ -1,8 +1,8 @@
 """FlashSAC's training seed must decide the agent's initial weights and warm-up actions, and the parallel envs must
 not share their random actions or exploration noise.
 
-DexMachina's curriculum reseeds the global RNGs with a fixed 42 while the env is built, so train.py has to seed
-again after building the envs; the fake env here does the same reseed.
+Resets while the env is built still consume the global RNGs, so train.py seeds again after building the envs; the
+fake env here overwrites the global RNGs with a fixed seed, the worst case of that.
 """
 
 import importlib.util
@@ -20,7 +20,7 @@ curriculum = pytest.importorskip("dexmachina.envs.curriculum")
 GlobalHydra = pytest.importorskip("hydra.core.global_hydra").GlobalHydra
 
 FLASHSAC_DIR = Path(__file__).parents[1] / "algorithms/FlashSAC"
-CURRICULUM_SEED = curriculum.get_curriculum_cfg()["seed"]
+BUILD_RESEED = curriculum.get_curriculum_cfg()["seed"]
 CPU_AGENT_OVERRIDES = [
     "env=dexmachina",
     "env.rl_device=cpu",
@@ -32,11 +32,11 @@ CPU_AGENT_OVERRIDES = [
 ]
 
 
-class CurriculumReseedingEnv(FakeDexEnv):
+class ReseedingEnv(FakeDexEnv):
     def __init__(self) -> None:
         super().__init__()
-        np.random.seed(CURRICULUM_SEED)
-        torch.manual_seed(CURRICULUM_SEED)
+        np.random.seed(BUILD_RESEED)
+        torch.manual_seed(BUILD_RESEED)
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def train(monkeypatch):
     spec.loader.exec_module(module)
 
     def create_fake_envs(**_):
-        env = flash_dex.GenesisFlashSACWrapper(FakeDexVecEnv(CurriculumReseedingEnv()), rl_device="cpu")
+        env = flash_dex.GenesisFlashSACWrapper(FakeDexVecEnv(ReseedingEnv()), rl_device="cpu")
         return env, env, env
 
     monkeypatch.setattr(module, "create_envs", create_fake_envs)

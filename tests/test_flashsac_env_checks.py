@@ -19,22 +19,7 @@ def _build(kwargs, meta):
     return flash_dex.make_dexmachina_env(meta["num_envs"], DEVICE, kwargs, meta["seed"], kwargs["env_name"]).env
 
 
-def test_objdex_baseline_with_the_golden_rewards_is_rejected(genesis_cpu, isolated_hand_cfgs):
-    kwargs, meta = _golden_kwargs()
-    kwargs["reward_cfg"] = {**kwargs["reward_cfg"], "objdex_baseline": True}
-    with pytest.raises(ValueError, match="obj_pos_beta"):
-        _build(kwargs, meta)
-
-
-def test_bc_wrist_weight_override_reaches_the_reward_module(genesis_cpu, isolated_hand_cfgs):
-    bc_wrist_weight = 0.25
-    kwargs, meta = _golden_kwargs()
-    kwargs["reward_cfg"] = {**kwargs["reward_cfg"], "bc_wrist_weight": bc_wrist_weight}
-    env = _build(kwargs, meta)
-    assert env.reward_module.bc_wrist_weight == bc_wrist_weight
-
-
-def test_env_without_curriculum_builds(genesis_cpu, isolated_hand_cfgs):
+def test_env_without_curriculum_is_rejected(genesis_cpu, isolated_hand_cfgs):
     kwargs, meta = _golden_kwargs(curriculum=False)
-    env = _build(kwargs, meta)
-    assert not env.use_curriculum
+    with pytest.raises(ValueError, match="actuate_object"):
+        _build(kwargs, meta)

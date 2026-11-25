@@ -30,6 +30,7 @@ NEUTRAL_ENV_NAME = "dexmachina/allegro_hand"
 DEFAULT_CLIP_SUFFIX = "s01-01"
 # FlashSAC's old default `clip`, which was silently replaced by the box clip.
 FLASHSAC_UNPARSEABLE_CLIP = "s01_ketchup_01"
+NEUTRAL_HAND = "allegro_hand"
 
 
 def _golden_meta(name):
@@ -141,7 +142,7 @@ def _flashsac_clip_for(requested_clip, monkeypatch, env_name=NEUTRAL_ENV_NAME):
         raise _ClipCaptured(args.clip)
 
     monkeypatch.setattr(factory, "get_all_env_cfg", capture_clip)
-    hydra_kwargs = flashsac_env_kwargs({"clip": requested_clip})
+    hydra_kwargs = flashsac_env_kwargs({"hand": NEUTRAL_HAND, "clip": requested_clip})
     with pytest.raises(_ClipCaptured) as captured:
         flash_dex.make_dexmachina_env(SNAPSHOT_NUM_ENVS, DEVICE, hydra_kwargs, SNAPSHOT_SEED, env_name)
     return captured.value.clip
@@ -150,8 +151,7 @@ def _flashsac_clip_for(requested_clip, monkeypatch, env_name=NEUTRAL_ENV_NAME):
 @pytest.mark.parametrize("requested, expected", [
     ("box-30-230", f"box-30-230-{DEFAULT_CLIP_SUFFIX}"),
     ("mixer-0-150", f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}"),
-    ("ketchup-0-200", f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}"),
-    (f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}", f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}"),
+    (f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}", f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}"),
     ("box", f"box-30-230-{DEFAULT_CLIP_SUFFIX}"),
     ("mixer", f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}"),
 ])
@@ -159,14 +159,15 @@ def test_flashsac_clip_mapping(requested, expected, monkeypatch):
     assert _flashsac_clip_for(requested, monkeypatch) == expected
 
 
-@pytest.mark.parametrize("requested", ["box-0-200", "mixer-30-230"])
-def test_flashsac_keeps_other_clip_ranges(requested, monkeypatch):
-    assert _flashsac_clip_for(requested, monkeypatch) == f"{requested}-{DEFAULT_CLIP_SUFFIX}"
+@pytest.mark.parametrize("requested", ["box-0-200", "mixer-30-230", "ketchup-0-200"])
+def test_flashsac_rejects_clips_outside_the_benchmark(requested, monkeypatch):
+    with pytest.raises(ValueError, match="not a benchmark clip"):
+        _flashsac_clip_for(requested, monkeypatch)
 
 
 def test_flashsac_ignores_an_env_name_that_mentions_an_object(monkeypatch):
-    clip = _flashsac_clip_for("ketchup-0-200", monkeypatch, env_name="dexmachina/box")
-    assert clip == f"ketchup-0-200-{DEFAULT_CLIP_SUFFIX}"
+    clip = _flashsac_clip_for("mixer-0-150", monkeypatch, env_name="dexmachina/box")
+    assert clip == f"mixer-0-150-{DEFAULT_CLIP_SUFFIX}"
 
 
 @pytest.mark.parametrize("requested", ["lunchbox", "box-60", "mixer_0_150"])
@@ -204,11 +205,7 @@ def test_flashsac_rejects_reward_key_that_would_overwrite_an_env_arg(monkeypatch
     assert "max_epochs" in _flashsac_error_for({"reward_cfg": rewards}, monkeypatch)
 
 
-def test_flashsac_rejects_max_epochs_within_the_zeroing_period(monkeypatch):
-    from dexmachina.envs.constructors import get_common_argparser
-
-    num_zero_epoch = get_common_argparser().parse_known_args([])[0].num_zero_epoch
-    message = _flashsac_error_for({"max_epochs": num_zero_epoch}, monkeypatch)
+def test_flashsac_rejects_max_epochs_that_differ_from_the_task(monkeypatch):
+    message = _flashsac_error_for({"max_epochs": 1000}, monkeypatch)
     assert "max_epochs" in message
-    assert "num_zero_epoch" in message
-    assert str(num_zero_epoch) in message
+    assert "benchmark task" in message

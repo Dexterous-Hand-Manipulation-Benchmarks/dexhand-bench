@@ -13,8 +13,9 @@ The files are rebuilt from the W&B config of each run (the export JSON of `expor
 The links are absolute paths into the checkpoint directories of this machine, so the output stays local: never commit
 it. The output directory must not exist yet.
 
-The spec comes from FlashSAC's own `dexmachina_spec` (the translation training uses), so a reconstructed spec equals
-the one a run of the same config saves today. Fields that the W&B config does not set take the `EnvSpec` defaults.
+The spec is the translation of the Hydra env config that the lab runs used (`lab_spec`: `EnvSpec` defaults plus what
+the config sets), not the benchmark task that FlashSAC trains on today. Fields that the W&B config does not set take
+the `EnvSpec` defaults.
 The lab runs used dexmachina commit `LAB_DEXMACHINA_SHA`; its argparse defaults equal today's `EnvSpec` defaults.
 A W&B key that has no mapping stops the run with an error.
 
@@ -35,6 +36,7 @@ from typing import Any, cast
 from dexmachina.envs.constructors import (
     parse_clip_string,  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 )
+from dexmachina.envs.rewards import get_reward_cfg  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 from dexmachina.envs.run_spec import (  # pyright: ignore[reportMissingTypeStubs]
     DIFF_KEY,
     DIRTY_KEY,
@@ -47,11 +49,10 @@ from dexmachina.envs.spec import EnvSpec  # pyright: ignore[reportMissingTypeStu
 from omegaconf import OmegaConf
 
 from flash_rl.envs.dexmachina import (  # pyright: ignore[reportMissingTypeStubs]
-    OBJ_ARTI_BETA_KEY,
-    OBJ_POS_BETA_KEY,
-    OBJ_ROT_BETA_KEY,
+    EXTRA_REWARD_KEYS,
     RUN_CONFIG_FILENAME,
-    dexmachina_spec,
+    DexmachinaEnvConfig,
+    full_clip_id,
 )
 
 # The dexmachina code the lab runs used: the commit whose envs/, eval/, rl/ and the other code directories are
@@ -119,6 +120,10 @@ ALWAYS_SET_SPEC_FIELDS = frozenset(
     {"num_envs", "seed", "actuate_object", "max_epochs", "retarget_name", "use_rl_games", "hand", "clip", "action_mode"}
 )
 CLIP_DERIVED_SPEC_FIELDS = frozenset({"frame_start", "frame_end", "arctic_object"})
+# Keys of dexmachina's reward config (envs/rewards.py) that the factory also maps onto dexmachina's args.
+OBJ_POS_BETA_KEY = "obj_pos_beta"
+OBJ_ROT_BETA_KEY = "obj_rot_beta"
+OBJ_ARTI_BETA_KEY = "obj_arti_beta"
 BETA_KEYS = (OBJ_POS_BETA_KEY, OBJ_ROT_BETA_KEY, OBJ_ARTI_BETA_KEY)
 CHECKPOINT_DIRNAME = "step{step}"
 
@@ -216,15 +221,53 @@ def spec_fields_set_by(env: Mapping[str, Any]) -> frozenset[str]:
     return ALWAYS_SET_SPEC_FIELDS | frozenset(set_by_rewards)
 
 
+def lab_spec(
+    num_envs: int, hydra_kwargs: Mapping[str, Any], seed: int, env_name: str
+) -> tuple[EnvSpec, dict[str, Any]]:
+    """The EnvSpec the lab FlashSAC runs built from their Hydra env kwargs, and their reward overrides.
+
+    A frozen copy of the translation the lab runs used, on purpose: it must not follow `dexmachina_spec`, which now
+    builds the benchmark task. It has no check that max_epochs exceeds num_zero_epoch: the lab value
+    (`LAB_MAX_EPOCHS`) is 10_000, so that check could never fire here.
+    """
+    config = DexmachinaEnvConfig.from_hydra(hydra_kwargs, env_name)
+    spec_values: dict[str, Any] = {
+        "num_envs": num_envs,
+        "seed": seed,
+        "actuate_object": config.actuate_object,
+        "max_epochs": config.max_epochs,
+        "retarget_name": config.retarget_name,
+        "use_rl_games": True,
+        "clip": full_clip_id(config.clip),
+    }
+    if config.hand is not None:
+        spec_values["hand"] = config.hand
+    rewards = config.reward_overrides
+    if rewards is not None:
+        known_keys = set(cast(Mapping[str, Any], get_reward_cfg()))
+        unknown_keys = sorted(set(rewards) - known_keys - EXTRA_REWARD_KEYS)
+        if unknown_keys:
+            raise ValueError(f"unknown reward_cfg keys: {unknown_keys}")
+        spec_field_names = {f.name for f in fields(EnvSpec)}
+        spec_values.update({k: v for k, v in rewards.items() if k in spec_field_names})
+        if any(key in rewards for key in BETA_KEYS):
+            defaults = EnvSpec().task_rew_betas
+            spec_values["task_rew_betas"] = (
+                rewards.get(OBJ_POS_BETA_KEY, defaults[0]),
+                rewards.get(OBJ_ROT_BETA_KEY, defaults[1]),
+                rewards.get(OBJ_ARTI_BETA_KEY, defaults[2]),
+            )
+    parse_clip_string(spec_values["clip"])
+    return replace(EnvSpec(), **spec_values), {} if rewards is None else dict(rewards)
+
+
 def reconstruct_spec(name: str, wandb_config: Mapping[str, Any]) -> tuple[EnvSpec, dict[str, Any], dict[str, Any]]:
     """The run's EnvSpec, its reward overrides, and the spec fields (with values) that took the EnvSpec default."""
     env = cast(Mapping[str, Any], wandb_config["env"])
     check_logger_copies(name, wandb_config)
     check_env_keys(name, env)
     hydra_kwargs = {**env, "max_epochs": LAB_MAX_EPOCHS}
-    spec, reward_overrides = dexmachina_spec(
-        int(env["num_train_envs"]), hydra_kwargs, int(env["seed"]), str(env["env_name"])
-    )
+    spec, reward_overrides = lab_spec(int(env["num_train_envs"]), hydra_kwargs, int(env["seed"]), str(env["env_name"]))
     spec = replace(spec, action_mode=LAB_ACTION_MODE)
     set_fields = spec_fields_set_by(env) | CLIP_DERIVED_SPEC_FIELDS
     values = cast(dict[str, Any], json.loads(spec.to_json()))

@@ -2,6 +2,7 @@
 import dataclasses
 import math
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,10 @@ from conftest import flashsac_env_kwargs
 from fakes import FakeDexEnv, FakeDexVecEnv
 
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
+from dexmachina.envs.benchmark_task import BENCHMARK_TASK  # noqa: E402
+
+BUDGET = BENCHMARK_TASK.budget_env_steps
+assert BUDGET is not None
 
 
 def make(**kwargs):
@@ -148,12 +153,103 @@ def _composed_eval_config() -> DictConfig:
     return cfg
 
 
-def test_dexmachina_spec_translates_the_hydra_kwargs():
+NUM_ENVS = 1024
+
+
+def benchmark_spec_for(hand, clip, seed, num_envs):
+    from dexmachina.envs.benchmark_task import RunChoices, benchmark_spec
+
+    return benchmark_spec(RunChoices(hand=hand, clip=clip, seed=seed, num_envs=num_envs))
+
+
+def test_dexmachina_spec_is_the_benchmark_task_of_the_run():
     kwargs = flashsac_env_kwargs({"hand": "allegro_hand", "clip": "box-30-230", "reward_cfg": {"force_penalty": 0.1}})
     spec, reward_overrides = flash_dex.dexmachina_spec(8, kwargs, 7, "dexmachina/allegro_hand")
-    assert (spec.num_envs, spec.seed, spec.hand, spec.clip) == (8, 7, "allegro_hand", "box-30-230-s01-01")
-    assert spec.use_rl_games and spec.actuate_object
+    assert spec == benchmark_spec_for("allegro_hand", "box-30-230", 7, 8)
+    assert spec.budget_env_steps == BUDGET
+    assert spec.curr_schedule == "fixed"
     assert reward_overrides == {"force_penalty": 0.1}
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"max_epochs": 5000}, "max_epochs"),
+        ({"retarget_name": "genesis"}, "retarget_name"),
+        ({"curriculum": False}, "actuate_object"),
+        ({"reward_cfg": {"contact_rew_weight": 1.0}}, "contact_rew_weight"),
+        ({"reward_cfg": {"obj_pos_beta": 1.0}}, "obj_pos_beta"),
+        ({"reward_cfg": {"objdex_baseline": True}}, "objdex_baseline"),
+        ({"reward_cfg": {"force_penalty": 0.2}}, "force_penalty"),
+        ({"reward_cfg": {"task_rew_weight": 0.5}}, "task_rew_weight"),
+        ({"reward_cfg": {"bc_wrist_weight": 0.25}}, "bc_wrist_weight"),
+    ],
+)
+def test_dexmachina_spec_refuses_a_run_that_overrides_a_task_field(overrides, field):
+    kwargs = {**flashsac_env_kwargs({"hand": "allegro_hand", "clip": "box-30-230"}), **overrides}
+    with pytest.raises(ValueError, match="benchmark task fixes") as error:
+        flash_dex.dexmachina_spec(8, kwargs, 7, "dexmachina/allegro_hand")
+    assert field in str(error.value)
+
+
+def test_dexmachina_spec_accepts_overrides_that_equal_the_task():
+    rewards = {"contact_rew_weight": 3.0, "obj_pos_beta": 10.0, "imi_rew_weight": 0.3, "force_penalty": 0.1}
+    kwargs = flashsac_env_kwargs({"hand": "allegro_hand", "clip": "box-30-230", "reward_cfg": rewards})
+    spec, _ = flash_dex.dexmachina_spec(8, kwargs, 7, "dexmachina/allegro_hand")
+    assert spec == benchmark_spec_for("allegro_hand", "box-30-230", 7, 8)
+
+
+def test_dexmachina_spec_needs_a_hand():
+    with pytest.raises(ValueError, match="env.hand"):
+        flash_dex.dexmachina_spec(8, flashsac_env_kwargs({"clip": "box-30-230"}), 7, "dexmachina/allegro_hand")
+
+
+def env_with_spec(num_envs):
+    raw = FakeDexEnv()
+    vec: Any = FakeDexVecEnv(raw)
+    vec.spec, vec.reward_overrides = benchmark_spec_for("allegro_hand", "box-30-230", 0, num_envs), {}
+    return flash_dex.GenesisFlashSACWrapper(vec, rl_device="cpu")
+
+
+# The smallest multiple of the env count that reaches the budget: what the loop needs to train it in full.
+BUDGET_RUN_ENV_STEPS = BUDGET + NUM_ENVS - BUDGET % NUM_ENVS
+
+
+@pytest.mark.parametrize("extra", [0, NUM_ENVS - 1])
+def test_budget_check_accepts_a_run_that_trains_the_budget_to_within_one_interaction_step(extra):
+    flash_dex.check_env_step_budget(env_with_spec(NUM_ENVS), BUDGET_RUN_ENV_STEPS + extra)
+
+
+def test_budget_check_refuses_the_budget_itself_when_it_is_not_a_multiple_of_the_env_count():
+    # The loop runs int(budget / num_envs) interaction steps, which trains less than the budget.
+    assert BUDGET % NUM_ENVS != 0
+    for num_env_steps in (BUDGET, BUDGET + 1):
+        with pytest.raises(ValueError, match="trains") as error:
+            flash_dex.check_env_step_budget(env_with_spec(NUM_ENVS), num_env_steps)
+        assert str(num_env_steps) in str(error.value)
+
+
+@pytest.mark.parametrize("num_env_steps", [1_000_000, 2 * BUDGET])
+def test_budget_check_refuses_a_run_of_another_length(num_env_steps):
+    with pytest.raises(ValueError, match="budget"):
+        flash_dex.check_env_step_budget(env_with_spec(NUM_ENVS), num_env_steps)
+
+
+def curriculum_env(env_steps):
+    env = env_with_spec(NUM_ENVS)
+    env.env.curriculum = SimpleNamespace(env_steps=env_steps)
+    return env
+
+
+def test_curriculum_check_accepts_the_trained_env_steps():
+    flash_dex.check_curriculum_saw_the_trained_steps(curriculum_env(10 * NUM_ENVS), 10)
+
+
+def test_curriculum_check_refuses_a_curriculum_that_counted_other_steps():
+    with pytest.raises(ValueError, match="counted") as error:
+        flash_dex.check_curriculum_saw_the_trained_steps(curriculum_env(9 * NUM_ENVS), 10)
+    assert str(9 * NUM_ENVS) in str(error.value)
+    assert str(10 * NUM_ENVS) in str(error.value)
 
 
 @pytest.mark.parametrize("missing", ["spec", "reward_overrides"])

@@ -55,6 +55,7 @@
     "use_rl_games",
     "is_eval",
     "rand_init_ratio",
+    "clear_nan_on_reset",
     "chunk_ep_length",
     "use_rand",
     "rand_friction",
@@ -78,6 +79,9 @@
     "max_epochs",
     "num_zero_epoch",
     "curr_schedule",
+    "budget_env_steps",
+    "fixed_start_fraction",
+    "fixed_zero_fraction",
     "fixed_mode",
     "decay_rew",
     "wait_epochs",
@@ -940,6 +944,21 @@
     },
     {
       "option_strings": [
+        "--clear_nan_on_reset",
+        "--no-clear_nan_on_reset"
+      ],
+      "dest": "clear_nan_on_reset",
+      "default": true,
+      "type": null,
+      "choices": null,
+      "nargs": 0,
+      "const": null,
+      "required": false,
+      "help": "Clear the NaN flag of an env when it resets (default: %(default)s)",
+      "action": "BooleanOptionalAction"
+    },
+    {
+      "option_strings": [
         "--chunk_ep_length",
         "-chunk"
       ],
@@ -1273,6 +1292,48 @@
         "exp",
         "uniform"
       ],
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--budget_env_steps"
+      ],
+      "dest": "budget_env_steps",
+      "default": null,
+      "type": "int",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": "Training env steps the run is budgeted for; the fixed curriculum schedule is a fraction of it",
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--fixed_start_fraction"
+      ],
+      "dest": "fixed_start_fraction",
+      "default": 0.01,
+      "type": "float",
+      "choices": null,
+      "nargs": null,
+      "const": null,
+      "required": false,
+      "help": null,
+      "action": "_StoreAction"
+    },
+    {
+      "option_strings": [
+        "--fixed_zero_fraction"
+      ],
+      "dest": "fixed_zero_fraction",
+      "default": 0.6,
+      "type": "float",
+      "choices": null,
       "nargs": null,
       "const": null,
       "required": false,
