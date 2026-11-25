@@ -40,7 +40,6 @@ USE_CURRICULUM="true"
 SAMPLE_BATCH_SIZE=4096
 USE_AMP="true"
 UPDATES_PER_STEP=4
-TEMP_TARGET_SIGMA=0.15 #isaaclab.sh
 GAMMA=0.99  # taken from run_isaaclab.sh
 N_STEP=3    # taken from run_isaaclab.sh
 
@@ -53,7 +52,11 @@ TARGET_ENTROPY_MODE="sac_heuristic"
 NORMALIZE_OBSERVATION="true"
 
 # --- 5. Hardware Device & Buffer Allocation Strategy ---
-NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo 1)
+NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())") || {
+    echo "[ERROR] Could not count the GPUs: importing torch in the ${DHB_EXTRA} uv environment failed (error above)." >&2
+    echo "        Fix the environment (uv sync --extra ${DHB_EXTRA}); guessing one GPU would run on the wrong devices." >&2
+    exit 1
+}
 
 # STRATEGY CHOICE:
 # Set to "10M_CPU" for full 10M buffer in System RAM with GPU training (Recommended)
@@ -85,8 +88,7 @@ fi
 BUFFER_MIN_LENGTH=100_000
 
 # --- 6. Explicit Benchmark Execution Queue ---
-# Seed 0 (all 6 runs) and Seed 1000 (first 5 runs) have completed successfully.
-# The queue below executes the remaining 7 runs: the failed Seed 1000 run and the full Seed 2000 suite.
+# One run per line: seed, hand, clip.
 RUN_QUEUE=(
     "1000 xhand box-30-230"
     "2000 allegro_hand box-30-230"
@@ -165,7 +167,6 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 --overrides "agent.buffer_min_length=${BUFFER_MIN_LENGTH}" \
                 --overrides "agent.sample_batch_size=${SAMPLE_BATCH_SIZE}" \
                 --overrides "agent.use_amp=${USE_AMP}" \
-                --overrides "agent.temp_target_sigma=${TEMP_TARGET_SIGMA}" \
                 --overrides "updates_per_interaction_step=${UPDATES_PER_STEP}" \
                 --overrides "gamma=${GAMMA}" \
                 --overrides "n_step=${N_STEP}" \
