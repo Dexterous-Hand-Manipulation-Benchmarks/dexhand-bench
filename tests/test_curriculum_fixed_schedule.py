@@ -6,6 +6,7 @@ dexmachina counts the env steps of training envs itself, so the gains do not dep
 
 import json
 import math
+import warnings
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -138,6 +139,17 @@ def test_the_decay_count_follows_the_start_gain_and_the_ratio() -> None:
 def test_the_fixed_schedule_needs_a_budget() -> None:
     with pytest.raises(ValueError, match="budget_env_steps"):
         _make_curriculum(budget_env_steps=None)
+
+
+def test_a_changed_epoch_option_warns_that_it_has_no_effect() -> None:
+    with pytest.warns(UserWarning, match="first_ratio.*no effect"):
+        _make_curriculum(first_ratio=0.5)
+
+
+def test_the_default_config_emits_no_warning() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _make_curriculum()
 
 
 def test_the_gated_schedule_still_decays_on_epochs_and_counts_env_steps_without_acting_on_them() -> None:
