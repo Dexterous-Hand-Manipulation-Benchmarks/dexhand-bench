@@ -15,6 +15,7 @@ import torch
 
 from fakes import FakeDexEnv, FakeDexVecEnv
 
+flash_envs = pytest.importorskip("flash_rl.envs", reason="needs the flashsac extra")
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
 curriculum = pytest.importorskip("dexmachina.envs.curriculum")
 GlobalHydra = pytest.importorskip("hydra.core.global_hydra").GlobalHydra
@@ -118,3 +119,19 @@ def test_envs_resample_their_exploration_noise_on_different_steps(train):
         resampled.append((agent._cached_noise != previous_noise).any(dim=-1).numpy())
     resampled_per_env = np.stack(resampled, axis=1)
     assert not np.array_equal(resampled_per_env[0], resampled_per_env[1])
+
+
+def test_the_dexmachina_env_is_built_with_the_runs_seed(train, monkeypatch):
+    seeds: list[int] = []
+
+    def fake_make_dexmachina_env(num_envs, device, hydra_kwargs, seed, env_name):
+        seeds.append(seed)
+        return FakeDexVecEnv(FakeDexEnv())
+
+    monkeypatch.setattr("genesis.init", lambda **_: None)
+    monkeypatch.setattr(flash_dex, "make_dexmachina_env", fake_make_dexmachina_env)
+    monkeypatch.setattr(flash_dex, "make_dexmachina_eval_env", lambda train_env, device: train_env)
+    cfg = train.compose_config("./configs", "flashSAC_base", [*CPU_AGENT_OVERRIDES, "seed=1234"])
+    GlobalHydra.instance().clear()
+    flash_envs.create_envs(**cfg.env)
+    assert seeds == [1234]
