@@ -73,10 +73,15 @@ class TrainRun:
         self.logger = logger
         self.directory = directory
 
-    def run(self, extra_overrides: list[str]) -> None:
+    def run(self, extra_overrides: list[str], allow_dirty_dexmachina: bool = False) -> None:
         GlobalHydra.instance().clear()
         overrides = [*TINY_RUN_OVERRIDES, *extra_overrides]
-        args = self.module.argparse.Namespace(config_path="./configs", config_name="flashSAC_base", overrides=overrides)
+        args = self.module.argparse.Namespace(
+            config_path="./configs",
+            config_name="flashSAC_base",
+            overrides=overrides,
+            allow_dirty_dexmachina=allow_dirty_dexmachina,
+        )
         self.module.run(args)
 
 
@@ -114,7 +119,12 @@ def train_run(monkeypatch, tmp_path, request):
     monkeypatch.setattr(module, "UniversalLogger", None)
     monkeypatch.setattr(module, "evaluate", lambda *args: {})
     monkeypatch.setattr(module, "record_video", lambda *args: {})
-    for check in ("check_env_step_budget", "refuse_resume_with_fixed_schedule", "save_run_files"):
+    for check in (
+        "check_env_step_budget",
+        "refuse_resume_with_fixed_schedule",
+        "refuse_dirty_dexmachina",
+        "save_run_files",
+    ):
         monkeypatch.setattr(module, check, lambda *args: None)
     monkeypatch.setattr(module, "check_curriculum_saw_the_trained_steps", lambda *args: None)
     monkeypatch.setattr(sys, "argv", [str(tmp_path / "train.py")])
@@ -172,3 +182,29 @@ def test_the_wandb_run_id_is_saved_in_the_run_directory(train_run, monkeypatch):
     run_dirs = list((train_run.directory / "models").glob("*/*/*/*/seed*"))
     assert len(run_dirs) == 1
     assert (run_dirs[0] / flash_dex.WANDB_RUN_ID_FILENAME).read_text().strip() == RecordingLogger.run.id
+
+
+def use_dexmachina_state(monkeypatch, train_run, dirty: bool) -> None:
+    """Makes train.py's real dirty check see a dexmachina checkout in the given state."""
+    run_spec = pytest.importorskip("dexmachina.envs.run_spec")
+    monkeypatch.setattr(train_run.module, "refuse_dirty_dexmachina", flash_dex.refuse_dirty_dexmachina)
+    monkeypatch.setattr(run_spec, "current_dexmachina_state", lambda: run_spec.DexmachinaState("0" * 40, dirty, None))
+
+
+def test_a_dirty_dexmachina_checkout_stops_training_before_the_envs_are_built(train_run, monkeypatch):
+    use_dexmachina_state(monkeypatch, train_run, dirty=True)
+    monkeypatch.setattr(train_run.module, "create_envs", lambda **_: pytest.fail("the envs were built"))
+    with pytest.raises(RuntimeError, match="untracked changes.*--allow-dirty-dexmachina"):
+        train_run.run([])
+
+
+def test_training_proceeds_on_a_dirty_dexmachina_checkout_when_allowed(train_run, monkeypatch):
+    use_dexmachina_state(monkeypatch, train_run, dirty=True)
+    train_run.run([], allow_dirty_dexmachina=True)
+    assert train_run.logger.logged_steps
+
+
+def test_training_proceeds_on_a_clean_dexmachina_checkout(train_run, monkeypatch):
+    use_dexmachina_state(monkeypatch, train_run, dirty=False)
+    train_run.run([])
+    assert train_run.logger.logged_steps
