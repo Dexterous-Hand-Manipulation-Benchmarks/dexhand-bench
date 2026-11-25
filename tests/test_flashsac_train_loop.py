@@ -9,6 +9,7 @@ import pytest
 
 from fakes import FakeDexEnv, FakeDexVecEnv
 
+create_agent = pytest.importorskip("flash_rl.agents").create_agent
 flash_dex = pytest.importorskip("flash_rl.envs.dexmachina", reason="needs the flashsac extra")
 GlobalHydra = pytest.importorskip("hydra.core.global_hydra").GlobalHydra
 
@@ -44,6 +45,7 @@ class RecordingLogger:
     def __init__(self) -> None:
         self.updates: list[dict[str, Any]] = []
         self.logged_steps: list[int] = []
+        self.transitions: list[dict[str, Any]] = []
 
     def update_metric(self, **kwargs: Any) -> None:
         self.updates.append(kwargs)
@@ -92,7 +94,19 @@ def train_run(monkeypatch, tmp_path, request):
         )
         return env, env, env
 
+    def create_recording_agent(**kwargs):
+        agent = create_agent(**kwargs)
+        process_transition = agent.process_transition
+
+        def record(transition):
+            logger.transitions.append({key: value.clone() for key, value in transition.items()})
+            process_transition(transition)
+
+        agent.process_transition = record
+        return agent
+
     monkeypatch.setattr(module, "create_envs", create_fake_envs)
+    monkeypatch.setattr(module, "create_agent", create_recording_agent)
     monkeypatch.setattr(module, "create_logger", lambda cfg: logger)
     monkeypatch.setattr(module, "UniversalLogger", None)
     monkeypatch.setattr(module, "evaluate", lambda *args: {})
@@ -136,3 +150,14 @@ def test_a_final_step_on_the_interval_is_saved_once(train_run):
 def test_the_final_step_is_saved_without_a_checkpoint_interval(train_run):
     train_run.run(["save_checkpoint_per_interaction_step=null"])
     assert saved_steps(train_run) == [f"step{NUM_INTERACTION_STEPS}"]
+
+
+def test_a_finished_episodes_next_observation_is_the_one_before_the_reset(train_run):
+    train_run.run([])
+    transitions = train_run.logger.transitions
+    assert len(transitions) == NUM_INTERACTION_STEPS
+    for transition in transitions:
+        # FakeDexEnv: every dimension of env i's observation is t + 100 * i, and t restarts at 0 after a reset.
+        expected = transition["observation"] + 1
+        assert (transition["next_observation"] == expected).all()
+    assert any(transition["terminated"].any() for transition in transitions)
