@@ -9,6 +9,7 @@ env:
   # keeps its upstream style.
   FASTTD3_OWN_FILES: >-
     algorithms/FastTD3/fast_td3/eval_dexmachina.py
+    algorithms/FastTD3/fast_td3/agent_builders.py
     algorithms/FastTD3/fast_td3/environments/dexmachina_env.py
 
 jobs:
@@ -57,8 +58,7 @@ jobs:
       - run: >-
           uv run --frozen --only-dev ruff check --config pyproject.toml --select $SILENT_FAILURE_RULES
           src scripts tests
-          algorithms/FastTD3/fast_td3/eval_dexmachina.py
-          algorithms/FastTD3/fast_td3/agent_builders.py
+          $FASTTD3_OWN_FILES
           algorithms/FlashSAC/eval_dexmachina.py
           algorithms/FlashSAC/check_curriculum.py
           algorithms/FlashSAC/flash_rl/envs/dexmachina.py

@@ -16,6 +16,7 @@ import json
 import os
 import sys
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -226,7 +227,9 @@ def test_golden_initial_networks_of_training(train_setup, case):
     built = train_setup(agent, **GOLDEN_SEEDS, extra_args=extra_args, stop_at="replay_buffer")
     fingerprint = network_fingerprint(built)
     if RECORD_GOLDEN:
-        recorded = json.loads(INITIAL_NETWORKS_FILE.read_text()) if INITIAL_NETWORKS_FILE.exists() else {"cases": {}}
+        recorded: dict[str, Any] = (
+            json.loads(INITIAL_NETWORKS_FILE.read_text()) if INITIAL_NETWORKS_FILE.exists() else {"cases": {}}
+        )
         recorded.update(recorded_on=CURRENT_PLATFORM, torch_version=TORCH_RELEASE)
         recorded["cases"][case] = fingerprint
         INITIAL_NETWORKS_FILE.write_text(json.dumps(recorded, indent=1) + "\n")
@@ -277,7 +280,7 @@ def test_step_checkpoints_are_named_after_and_store_the_iterations_done(
     assert saved["final.pt"] == total
 
 
-def wandb_run(mode: str, project="a-project", entity="an-entity") -> SimpleNamespace:
+def wandb_run(mode: str, project: str = "a-project", entity: str | None = "an-entity") -> SimpleNamespace:
     """The attributes train.py reads from wandb.run, as W&B sets them in each mode."""
     return SimpleNamespace(
         id="run-id", project=project, entity=entity, offline=mode == "offline", disabled=mode == "disabled"
