@@ -88,7 +88,7 @@ fi
 BUFFER_MIN_LENGTH=100_000
 
 # --- 6. Explicit Benchmark Execution Queue ---
-# One run per line: seed, hand, clip.
+# One run per line: seed, hand, clip. A run whose benchmark evaluation file already exists is skipped.
 RUN_QUEUE=(
     "1000 xhand box-30-230"
     "2000 allegro_hand box-30-230"
@@ -113,10 +113,10 @@ for run_item in "${RUN_QUEUE[@]}"; do
         continue
     fi
 
-    # Check if this run was already completed in the current campaign (milestone results directory exists)
-    COMPLETED_RESULTS=$(find "models/FlashSAC/${run_exp_name}" -mindepth 3 -maxdepth 5 -type d -name "*results" 2>/dev/null | head -n 1)
-    if [ -n "$COMPLETED_RESULTS" ]; then
-        echo "[SKIP] Experiment ${run_exp_name} already completed (${COMPLETED_RESULTS} found). Moving to next..."
+    # The benchmark evaluation (eval_dexmachina.py, TRAJECTORY_FILENAME) saves this file next to the evaluated checkpoint.
+    COMPLETED_EVALUATION=$(find "models/FlashSAC/${run_exp_name}" -mindepth 3 -maxdepth 5 -type f -name "benchmark_trajectory_*.npz" 2>/dev/null | head -n 1)
+    if [ -n "$COMPLETED_EVALUATION" ]; then
+        echo "[SKIP] Experiment ${run_exp_name} already completed (${COMPLETED_EVALUATION} found). Moving to next..."
         continue
     fi
 
@@ -183,16 +183,8 @@ for run_item in "${RUN_QUEUE[@]}"; do
 
             echo "[SUCCESS] Training completed for $run_exp_name"
 
-            # 2. EVALUATION & RENDERING
-            echo "[START] Evaluating & Rendering checkpoints for: $run_exp_name"
-
-            LATEST_WANDB_DIR=$(ls -td wandb/*run-* 2>/dev/null | head -n 1)
-            if [ -n "$LATEST_WANDB_DIR" ]; then
-                WANDB_RUN_ID=$(basename "$LATEST_WANDB_DIR" | awk -F'-' '{print $NF}')
-                WANDB_ARG="--wandb_run_id ${WANDB_RUN_ID}"
-            else
-                WANDB_ARG=""
-            fi
+            # 2. BENCHMARK EVALUATION of the final checkpoint (the protocol shared by all methods)
+            echo "[START] Evaluating the final checkpoint of: $run_exp_name"
 
             LATEST_TS_DIR=$(find "models/FlashSAC/${run_exp_name}" -mindepth 2 -maxdepth 3 -type d -name "seed*" 2>/dev/null | sort -V | tail -n 1)
 
@@ -201,34 +193,30 @@ for run_item in "${RUN_QUEUE[@]}"; do
                 continue
             fi
 
-            STEP_DIRS=$(find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" 2>/dev/null | sort -V)
-            TOTAL_CHECKPOINTS=$(echo "$STEP_DIRS" | wc -w)
-            CHECKPOINT_COUNTER=0
+            WANDB_RUN_ID_FILE="${LATEST_TS_DIR}/wandb_run_id.txt"
+            if [ ! -f "$WANDB_RUN_ID_FILE" ]; then
+                echo "[ERROR] ${WANDB_RUN_ID_FILE} does not exist: train.py saves it when the run starts, so the evaluation" >&2
+                echo "        cannot tell which W&B run to log into. Check that training used logger_type=wandb." >&2
+                exit 1
+            fi
+            WANDB_RUN_ID=$(cat "$WANDB_RUN_ID_FILE")
 
-            for STEP_DIR in $STEP_DIRS; do
-                CHECKPOINT_COUNTER=$((CHECKPOINT_COUNTER + 1))
-                STEP_NUM=$(basename "$STEP_DIR" | sed 's/step//')
+            FINAL_STEP_DIR=$(find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" 2>/dev/null | sort -V | tail -n 1)
+            if [ -z "$FINAL_STEP_DIR" ]; then
+                echo "[ERROR] No step directory in ${LATEST_TS_DIR}; training saved no checkpoint." >&2
+                exit 1
+            fi
 
-                python eval_dexmachina.py \
-                    --old-protocol \
-                    --config_path "${CONFIG_PATH}" \
-                    --config_name "${CONFIG_NAME}" \
-                    --checkpoint_path "${STEP_DIR}" \
-                    ${WANDB_ARG} \
-                    --project "${PROJECT_NAME}" \
-                    --step "${STEP_NUM}" \
-                    --num_episodes 1 \
-                    "${SHARED_ENV_OVERRIDES[@]}" \
-                    "${SHARED_AGENT_OVERRIDES[@]}" \
-                    --overrides "env.num_record_envs=1"
+            python eval_dexmachina.py \
+                --checkpoint_path "${FINAL_STEP_DIR}" \
+                --wandb_run_id "${WANDB_RUN_ID}" \
+                --project "${PROJECT_NAME}" \
+                --device "${SIM_DEVICE}"
 
-                if [ "$CHECKPOINT_COUNTER" -lt "$TOTAL_CHECKPOINTS" ]; then
-                    rm -rf "${STEP_DIR}"
-                else
-                    echo "[PRESERVE] Keeping final milestone checkpoint: ${STEP_DIR}"
-                fi
-        done
-        echo "[SUCCESS] Milestone evaluations completed for $run_exp_name"
+            # Disk policy: only the final checkpoint stays, and only after its evaluation succeeded (set -e).
+            find "$LATEST_TS_DIR" -maxdepth 1 -type d -name "step*" ! -path "${FINAL_STEP_DIR}" -exec rm -rf {} +
+            echo "[PRESERVE] Kept the final checkpoint: ${FINAL_STEP_DIR}"
+        echo "[SUCCESS] Evaluation completed for $run_exp_name"
         echo "--------------------------------------------------------"
 
 done
