@@ -31,7 +31,7 @@ RETARGET_NAME="para"
 
 # --- 4. Training-Specific Hyperparameters ---
 NUM_ENV_STEPS=50_000_896
-NUM_TRAIN_ENVS=1024 # AT9
+NUM_TRAIN_ENVS=1024
 # The eval env (dexmachina make_eval_env) starts every episode at the first frame, without assistance, and the
 # policy acts deterministically, so more eval episodes would repeat the same rollout.
 NUM_EVAL_EPISODES=1
@@ -125,8 +125,15 @@ for run_item in "${RUN_QUEUE[@]}"; do
         continue
     fi
 
-    # A training that reached its final step but has no evaluation (the evaluation failed earlier) is evaluated, not retrained.
-    FINISHED_STEP_DIRS=$(find "$exp_dir" -maxdepth 5 -type d -name "step${FINAL_INTERACTION_STEP}" 2>/dev/null | sort)
+    # A training that finished (train.py wrote training_finished) but has no evaluation (it failed earlier) is evaluated,
+    # not retrained.
+    FINISHED_STEP_DIRS=""
+    for step_dir in $(find "$exp_dir" -maxdepth 5 -type d -name "step${FINAL_INTERACTION_STEP}" 2>/dev/null | sort); do
+        if [ -f "$(dirname "$step_dir")/training_finished" ]; then
+            FINISHED_STEP_DIRS+="${step_dir}"$'\n'
+        fi
+    done
+    FINISHED_STEP_DIRS="${FINISHED_STEP_DIRS%$'\n'}"
     if [ -n "$FINISHED_STEP_DIRS" ] && [ "$(echo "$FINISHED_STEP_DIRS" | wc -l)" -gt 1 ]; then
         echo "[ERROR] ${exp_dir} has several finished trainings without an evaluation:" >&2
         echo "$FINISHED_STEP_DIRS" >&2
@@ -205,7 +212,7 @@ for run_item in "${RUN_QUEUE[@]}"; do
     fi
 
     # The benchmark evaluation of the final checkpoint (the protocol shared by all methods).
-    "${DHB_ROOT}/scripts/flashsac/evaluate_run.sh" "$RUN_DIR" "$PROJECT_NAME" "$SIM_DEVICE"
+    "${DHB_ROOT}/scripts/flashsac/evaluate_run.sh" "$RUN_DIR" "$PROJECT_NAME" "$SIM_DEVICE" "$FINAL_INTERACTION_STEP"
     echo "[SUCCESS] Evaluation completed for $run_exp_name"
     echo "--------------------------------------------------------"
 done

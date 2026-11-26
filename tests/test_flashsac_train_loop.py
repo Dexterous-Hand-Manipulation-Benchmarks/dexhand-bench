@@ -188,6 +188,26 @@ def test_the_wandb_run_id_is_saved_in_the_run_directory(train_run: TrainRun, mon
     assert (run_dirs[0] / flash_dex.WANDB_RUN_ID_FILENAME).read_text().strip() == RecordingLogger.run.id
 
 
+def test_a_finished_training_leaves_the_completion_marker(train_run: TrainRun) -> None:
+    train_run.run([])
+    (run_dir,) = (train_run.directory / "models").glob("*/*/*/*/seed*")
+    assert (run_dir / flash_dex.TRAINING_FINISHED_FILENAME).exists()
+
+
+def test_a_failed_curriculum_check_leaves_no_completion_marker(
+    train_run: TrainRun, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def failing_check(*args: Any) -> None:
+        raise ValueError("the curriculum counted too few steps")
+
+    monkeypatch.setattr(train_run.module, "check_curriculum_saw_the_trained_steps", failing_check)
+    with pytest.raises(ValueError, match="curriculum counted"):
+        train_run.run([])
+    (run_dir,) = (train_run.directory / "models").glob("*/*/*/*/seed*")
+    assert run_dir.exists()
+    assert not (run_dir / flash_dex.TRAINING_FINISHED_FILENAME).exists()
+
+
 def use_dexmachina_state(monkeypatch: pytest.MonkeyPatch, train_run: TrainRun, dirty: bool) -> None:
     """Makes train.py's real dirty check see a dexmachina checkout in the given state."""
     run_spec = pytest.importorskip("dexmachina.envs.run_spec")
