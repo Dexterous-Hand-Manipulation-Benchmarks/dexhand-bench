@@ -255,6 +255,7 @@
      }
     },
     "chunk_ep_length": -1,
+    "clear_nan_on_reset": true,
     "dt": 0.016666666666666666,
     "early_reset_aux_thres": {
      "bc": 0,
