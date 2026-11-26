@@ -12,18 +12,32 @@ from dexhand_bench.wandb_logger import UniversalLogger
 
 
 _IDENTITY_ATTRIBUTES = ("algo", "hand", "clip", "seed", "num_train_envs", "num_eval_envs")
+# Every data attribute install() sets on the class.
+_INSTALLED_ATTRIBUTES = (
+    *_IDENTITY_ATTRIBUTES,
+    "num_envs",
+    "horizon_length",
+    "keep_model_specific",
+    "is_eval",
+    "start_time",
+    "last_env_step",
+    "algo_specific_map",
+)
 
 
 @pytest.fixture
 def logger():
     """Install the logger and undo its global wandb patches afterwards."""
     orig_init, orig_log = wandb.init, wandb.sdk.wandb_run.Run.log
-    orig_state = {name: getattr(UniversalLogger, name) for name in _IDENTITY_ATTRIBUTES}
+    orig_state = {name: vars(UniversalLogger)[name] for name in _INSTALLED_ATTRIBUTES if name in vars(UniversalLogger)}
     yield UniversalLogger
     wandb.init, wandb.sdk.wandb_run.Run.log = orig_init, orig_log
     UniversalLogger._installed = False
-    for name, value in orig_state.items():
-        setattr(UniversalLogger, name, value)
+    for name in _INSTALLED_ATTRIBUTES:
+        if name in orig_state:
+            setattr(UniversalLogger, name, orig_state[name])
+        elif name in vars(UniversalLogger):
+            delattr(UniversalLogger, name)
 
 
 def test_shim_exports_the_same_logger():

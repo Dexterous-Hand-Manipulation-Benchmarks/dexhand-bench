@@ -279,7 +279,7 @@ class UniversalLogger:
     hand: Optional[str] = None
     clip: Optional[str] = None
     seed: Optional[int] = None
-    num_envs: int = 1024
+    num_envs: int
     num_train_envs: Optional[int] = None
     num_eval_envs: Optional[int] = None
     horizon_length: int = 16
