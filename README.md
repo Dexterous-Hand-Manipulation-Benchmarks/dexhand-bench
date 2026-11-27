@@ -3,8 +3,9 @@
 Benchmarking reinforcement-learning methods on dexterous bimanual manipulation
 across simulators. The benchmark currently runs on
 [DexMachina](https://github.com/MandiZhao/dexmachina) (Genesis simulator); tasks from
-[DexJoCo-X](https://github.com/dexjoco-x/DexJoCo-X-public) (MuJoCo) are being integrated in
-[dexjoco](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexjoco).
+[DexJoCo-X](https://jxw-wei.github.io/DexJoCo-X-website/) and [DexJoCo](https://dexjoco.github.io/) V1 (both
+MuJoCo) are being integrated in [dexjoco](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexjoco),
+starting with DexJoCo-X.
 
 This repository only holds the glue: run scripts, a small shared package
 (unified W&B logging, configuration) and tests. Every method and environment
@@ -20,6 +21,7 @@ exact upstream commit we started from, so they can be upstreamed later.
 | `algorithms/dexhand-ppo` | [dexhand-ppo](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexhand-ppo) | (our own PPO, no upstream) |
 | `algorithms/reppo` | [reppo](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/reppo) | [cvoelcker/reppo](https://github.com/cvoelcker/reppo) |
 | `environments/dexmachina` | [dexmachina](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexmachina) | [MandiZhao/dexmachina](https://github.com/MandiZhao/dexmachina) |
+| `environments/dexjoco` (added with the first adapter) | [dexjoco](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexjoco) (our own repo; upstream pinned as submodules) | [dexjoco-x/DexJoCo-X-public](https://github.com/dexjoco-x/DexJoCo-X-public); [brave-eai/dexjoco](https://github.com/brave-eai/dexjoco) (V1, planned) |
 | `environments/Genesis` | [Genesis](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/Genesis) | [MandiZhao/Genesis](https://github.com/MandiZhao/Genesis) (`older` branch, Genesis 0.2.1) |
 
 dexmachina's own PPO baseline uses [MandiZhao/rl_games](https://github.com/MandiZhao/rl_games)
