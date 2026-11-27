@@ -1,7 +1,10 @@
 # dexhand-bench
 
 Benchmarking reinforcement-learning methods on dexterous bimanual manipulation
-with [DexMachina](https://github.com/MandiZhao/dexmachina) (Genesis simulator).
+across simulators. The benchmark currently runs on
+[DexMachina](https://github.com/MandiZhao/dexmachina) (Genesis simulator); tasks from
+[DexJoCo-X](https://github.com/dexjoco-x/DexJoCo-X-public) (MuJoCo) are being integrated in
+[dexjoco](https://github.com/Dexterous-Hand-Manipulation-Benchmarks/dexjoco).
 
 This repository only holds the glue: run scripts, a small shared package
 (unified W&B logging, configuration) and tests. Every method and environment

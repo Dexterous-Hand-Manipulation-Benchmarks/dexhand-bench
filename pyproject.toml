@@ -1,7 +1,7 @@
 [project]
 name = "dexhand-bench"
 version = "0.1.0"
-description = "Benchmarking RL methods on dexterous bimanual hand manipulation (DexMachina)."
+description = "Benchmarking RL methods on dexterous bimanual hand manipulation across simulators."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10,<3.11"
